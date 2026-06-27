@@ -58,6 +58,13 @@
       "description": "VMware vSphere architecture skill + design commands.",
       "version": "0.1.0",
       "author": { "name": "Mark Alston" }
+    },
+    {
+      "name": "marks-book-knowledge",
+      "source": "./marks-book-knowledge",
+      "description": "Knowledge bases distilled from books via book-to-skill (Kubernetes internals, Terraform, software security, system design) plus the book-to-skill generator itself.",
+      "version": "0.1.0",
+      "author": { "name": "Mark Alston" }
     }
   ]
 }
