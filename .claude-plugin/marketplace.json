@@ -1,5 +1,5 @@
 {
-  "name": "claude-plugin-marketplace",
+  "name": "marks-marketplace",
   "description": "Mark Alston's private Claude Code marketplace of thematic skill plugins.",
   "owner": { "name": "Mark Alston" },
   "plugins": [

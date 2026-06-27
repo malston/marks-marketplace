@@ -1,22 +1,22 @@
-# claude-plugin-marketplace
+# marks-marketplace
 
 Private Claude Code marketplace of Mark's skills, packaged as thematic plugins.
 
 ## Install (per machine)
 
-    claude plugin marketplace add malston/claude-plugin-marketplace
-    claude plugin install marks-languages@claude-plugin-marketplace
+    claude plugin marketplace add malston/marks-marketplace
+    claude plugin install marks-languages@marks-marketplace
     # ...repeat per plugin wanted on this machine
 
 ## Update
 
     git push                                   # publish changes
-    claude plugin marketplace update claude-plugin-marketplace
+    claude plugin marketplace update marks-marketplace
 
 To refresh an installed plugin after publishing:
 
     claude plugin uninstall <plugin>
-    claude plugin install <plugin>@claude-plugin-marketplace
+    claude plugin install <plugin>@marks-marketplace
 
 Note: `claude plugin update <plugin>` may report "Plugin not found" -- use uninstall/reinstall instead.
 
