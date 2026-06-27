@@ -21,7 +21,7 @@
       "name": "marks-git-workflow",
       "source": "./marks-git-workflow",
       "description": "Git and review workflow plus the investigation-scratchpad skill and its enforcement hook.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "author": { "name": "Mark Alston" }
     },
     {
