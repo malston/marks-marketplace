@@ -1,7 +1,7 @@
 ---
 description: Save the current iTerm2 session contents
 allowed-tools:
-  - bash_tool
+  - Bash
 ---
 
 Run this command to save your iTerm2 session:
