@@ -44,6 +44,13 @@
       "description": "Safety hooks: bash command logging, dangerous-command blocking, sensitive-file protection, and auto-formatting for Go/JS/TS/Markdown.",
       "version": "0.1.0",
       "author": { "name": "Mark Alston" }
+    },
+    {
+      "name": "marks-iterm",
+      "source": "./marks-iterm",
+      "description": "iTerm2 session capture command (macOS/iTerm2 only).",
+      "version": "0.1.0",
+      "author": { "name": "Mark Alston" }
     }
   ]
 }

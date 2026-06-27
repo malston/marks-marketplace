@@ -1,0 +1,6 @@
+{
+  "name": "marks-iterm",
+  "version": "0.1.0",
+  "description": "iTerm2 session capture: a command to save the current iTerm2 session scrollback to a timestamped file. Requires macOS iTerm2 with the Python API and the iterm2 module.",
+  "author": { "name": "Mark Alston" }
+}
