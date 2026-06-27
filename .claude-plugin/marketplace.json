@@ -72,6 +72,13 @@
       "description": "Forgd session tooling: quick/deep/ELI5 training references, deck coaching, and teleprompter script generation.",
       "version": "0.1.0",
       "author": { "name": "Mark Alston" }
+    },
+    {
+      "name": "marks-cca",
+      "source": "./marks-cca",
+      "description": "CCA-Foundations exam prep: practice-card formatting, a practice-tracking coach, and an interactive quiz drill.",
+      "version": "0.1.0",
+      "author": { "name": "Mark Alston" }
     }
   ]
 }
