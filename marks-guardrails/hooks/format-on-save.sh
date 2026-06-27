@@ -20,7 +20,7 @@
 #             "hooks": [
 #               {
 #                 "type": "command",
-#                 "command": "~/.claude/hooks/format-on-save.sh"
+#                 "command": "${CLAUDE_PLUGIN_ROOT}/hooks/format-on-save.sh"
 #               }
 #             ]
 #           }

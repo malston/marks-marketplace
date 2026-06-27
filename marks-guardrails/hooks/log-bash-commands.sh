@@ -23,7 +23,7 @@
 #             "hooks": [
 #               {
 #                 "type": "command",
-#                 "command": "~/.claude/hooks/log-bash-commands.sh"
+#                 "command": "${CLAUDE_PLUGIN_ROOT}/hooks/log-bash-commands.sh"
 #               }
 #             ]
 #           }

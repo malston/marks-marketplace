@@ -25,7 +25,7 @@
 #             "hooks": [
 #               {
 #                 "type": "command",
-#                 "command": "~/.claude/hooks/protect-sensitive-files.sh"
+#                 "command": "${CLAUDE_PLUGIN_ROOT}/hooks/protect-sensitive-files.sh"
 #               }
 #             ]
 #           }

@@ -25,7 +25,7 @@
 #             "hooks": [
 #               {
 #                 "type": "command",
-#                 "command": "~/.claude/hooks/block-dangerous-commands.sh"
+#                 "command": "${CLAUDE_PLUGIN_ROOT}/hooks/block-dangerous-commands.sh"
 #               }
 #             ]
 #           }

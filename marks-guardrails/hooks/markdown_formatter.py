@@ -26,7 +26,7 @@ CONFIGURATION:
             "hooks": [
               {
                 "type": "command",
-                "command": "~/.claude/hooks/markdown_formatter.py"
+                "command": "${CLAUDE_PLUGIN_ROOT}/hooks/markdown_formatter.py"
               }
             ]
           }

@@ -13,7 +13,7 @@ description: Create a github release
 
 ## Your task
 
-When the all the checks pass in CI workflow, I want you to:
+When all the checks pass in CI workflow, I want you to:
 
 - Merge the pull request (if I haven't already merged it)
 - Create and push new release tag with the latest commits since last release
