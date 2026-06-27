@@ -1,0 +1,6 @@
+{
+  "name": "marks-git-workflow",
+  "version": "0.1.0",
+  "description": "Git and review workflow: commit helper, PR comments, PR review fixes, session notes, and the investigation-scratchpad skill plus its enforcement hook.",
+  "author": { "name": "Mark Alston" }
+}

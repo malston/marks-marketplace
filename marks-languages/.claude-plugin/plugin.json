@@ -1,0 +1,6 @@
+{
+  "name": "marks-languages",
+  "version": "0.1.0",
+  "description": "Per-language coding standards and idioms: bash, Go, Python, Rust, TypeScript.",
+  "author": { "name": "Mark Alston" }
+}

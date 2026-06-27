@@ -1,0 +1,42 @@
+{
+  "name": "claude-plugin-marketplace",
+  "description": "Mark Alston's private Claude Code marketplace of thematic skill plugins.",
+  "owner": { "name": "Mark Alston" },
+  "plugins": [
+    {
+      "name": "marks-languages",
+      "source": "./marks-languages",
+      "description": "Per-language coding standards and idioms: bash, Go, Python, Rust, TypeScript.",
+      "version": "0.1.0",
+      "author": { "name": "Mark Alston" }
+    },
+    {
+      "name": "marks-dev-practice",
+      "source": "./marks-dev-practice",
+      "description": "Engineering practice: clean architecture, TDD, PR-driven TDD, subagent context scoping, code explanation.",
+      "version": "0.1.0",
+      "author": { "name": "Mark Alston" }
+    },
+    {
+      "name": "marks-git-workflow",
+      "source": "./marks-git-workflow",
+      "description": "Git and review workflow plus the investigation-scratchpad skill and its enforcement hook.",
+      "version": "0.1.0",
+      "author": { "name": "Mark Alston" }
+    },
+    {
+      "name": "marks-vault",
+      "source": "./marks-vault",
+      "description": "Obsidian vault operations: date-slug renaming, vlt CLI workflows, memory consolidation.",
+      "version": "0.1.0",
+      "author": { "name": "Mark Alston" }
+    },
+    {
+      "name": "marks-writing",
+      "source": "./marks-writing",
+      "description": "Writing quality: detect and fix AI-generated slop patterns.",
+      "version": "0.1.0",
+      "author": { "name": "Mark Alston" }
+    }
+  ]
+}

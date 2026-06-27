@@ -1,0 +1,6 @@
+{
+  "name": "marks-writing",
+  "version": "0.1.0",
+  "description": "Writing quality: detect and fix AI-generated slop patterns.",
+  "author": { "name": "Mark Alston" }
+}

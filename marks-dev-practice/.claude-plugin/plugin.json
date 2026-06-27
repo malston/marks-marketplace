@@ -1,0 +1,6 @@
+{
+  "name": "marks-dev-practice",
+  "version": "0.1.0",
+  "description": "Engineering practice: clean architecture, TDD, PR-driven TDD, subagent context scoping, code explanation.",
+  "author": { "name": "Mark Alston" }
+}
