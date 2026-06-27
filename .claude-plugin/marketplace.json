@@ -62,7 +62,7 @@
     {
       "name": "marks-book-knowledge",
       "source": "./marks-book-knowledge",
-      "description": "Knowledge bases distilled from books via book-to-skill (Kubernetes internals, Terraform, software security, system design) plus the book-to-skill generator itself.",
+      "description": "Knowledge bases distilled from books (Kubernetes internals, Terraform, software security, system design).",
       "version": "0.1.0",
       "author": { "name": "Mark Alston" }
     }
