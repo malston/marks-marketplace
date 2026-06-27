@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "name": "explain-code",
+  "owner": "kimliss",
+  "repo": "claude-code-inhand",
+  "path": "plugins/dev-toolkit/skills/explain-code",
+  "branch": "main",
+  "sha": "dc5fe85eac8b748f3b3220bc0aecf8cddef02f6a",
+  "source": "manual"
+}
