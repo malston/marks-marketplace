@@ -79,6 +79,13 @@
       "description": "CCA-Foundations exam prep: practice-card formatting, a practice-tracking coach, and an interactive quiz drill.",
       "version": "0.1.0",
       "author": { "name": "Mark Alston" }
+    },
+    {
+      "name": "marks-ai-eng",
+      "source": "./marks-ai-eng",
+      "description": "AI engineering helpers: Claude API building reference, prompt lookup, and an official-docs consultant.",
+      "version": "0.1.0",
+      "author": { "name": "Mark Alston" }
     }
   ]
 }
