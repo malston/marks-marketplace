@@ -51,6 +51,13 @@
       "description": "iTerm2 session capture command (macOS/iTerm2 only).",
       "version": "0.1.0",
       "author": { "name": "Mark Alston" }
+    },
+    {
+      "name": "marks-vsphere",
+      "source": "./marks-vsphere",
+      "description": "VMware vSphere architecture skill + design commands.",
+      "version": "0.1.0",
+      "author": { "name": "Mark Alston" }
     }
   ]
 }

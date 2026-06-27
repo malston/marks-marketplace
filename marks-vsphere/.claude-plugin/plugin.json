@@ -1,0 +1,6 @@
+{
+  "name": "marks-vsphere",
+  "version": "0.1.0",
+  "description": "VMware vSphere architecture: the vsphere-architect skill plus commands for HA design and related vSphere design tasks.",
+  "author": { "name": "Mark Alston" }
+}
