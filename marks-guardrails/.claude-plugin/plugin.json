@@ -1,0 +1,6 @@
+{
+  "name": "marks-guardrails",
+  "version": "0.1.0",
+  "description": "Safety hooks: bash command logging, dangerous-command blocking, sensitive-file protection, and auto-formatting for Go/JS/TS/Markdown.",
+  "author": { "name": "Mark Alston" }
+}
