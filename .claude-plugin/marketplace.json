@@ -65,6 +65,13 @@
       "description": "Knowledge bases distilled from books (Kubernetes internals, Terraform, software security, system design).",
       "version": "0.1.0",
       "author": { "name": "Mark Alston" }
+    },
+    {
+      "name": "marks-forgd-training",
+      "source": "./marks-forgd-training",
+      "description": "Forgd session tooling: quick/deep/ELI5 training references, deck coaching, and teleprompter script generation.",
+      "version": "0.1.0",
+      "author": { "name": "Mark Alston" }
     }
   ]
 }
