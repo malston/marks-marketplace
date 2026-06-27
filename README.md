@@ -22,11 +22,15 @@ Note: `claude plugin update <plugin>` may report "Plugin not found" -- use unins
 
 ## Plugins
 
-- **marks-languages** — language learning skills and review workflows
-- **marks-dev-practice** — TDD, debugging, code review, and planning skills; commit/create-release/make-local-issue/recovery-prompt/update-memory commands; test-runner agent; pre-commit hooks
-- **marks-git-workflow** — git and PR review workflow; commit-push-pr command; investigation-scratchpad skill; scratchpad enforcement hook
-- **marks-vault** — Obsidian vault management skills and commands
-- **marks-writing** — writing clarity, elements of style, and prose skills
-- **marks-guardrails** — safety guardrails: block-dangerous-commands hook, protect-sensitive-files hook, markdown formatter hook
-- **marks-iterm** — iTerm2 session save/restore; save-iterm-session hook (macOS + iTerm2 Python API required)
-- **marks-vsphere** — vSphere infrastructure automation; vsphere-architect skill and command
+- **marks-languages** — per-language coding standards: bash, go, python, rust, typescript
+- **marks-dev-practice** — clean-architecture, TDD, tdd-pr, scoping-context-for-subagents, explain-code skills; test-runner agent; dev-workflow + promptengineering commands
+- **marks-git-workflow** — commit-helper, pr-comments, pr-review-fix, session-notes, investigation-scratchpad skills; commit/create-release/make-local-issue/recovery-prompt/update-memory commands; scratchpad-nudge hook
+- **marks-vault** — Obsidian vault tooling: date-slug-rename, vlt-skill, dream
+- **marks-writing** — the-antislop (detect/fix AI-generated prose)
+- **marks-guardrails** — safety/format hooks: block-dangerous-commands, protect-sensitive-files, format-on-save, log-bash-commands, markdown_formatter
+- **marks-iterm** — iTerm2 session-save command + bin script (macOS + iTerm2 Python API required)
+- **marks-vsphere** — vsphere-architect skill + vSphere design commands
+- **marks-book-knowledge** — knowledge bases distilled from books: core-kubernetes, terraform-in-depth, software-security-for-developers, system-design-interview
+- **marks-forgd-training** — Forgd session tooling: ask/deep/eli5 references, deck-coach, teleprompter-script
+- **marks-cca** — CCA-Foundations exam prep: format-practice, practice-coach, quiz
+- **marks-ai-eng** — AI engineering helpers: llm-api-builder, prompt-lookup, claude-docs-consultant
