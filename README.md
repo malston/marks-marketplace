@@ -12,7 +12,13 @@ Private Claude Code marketplace of Mark's skills, packaged as thematic plugins.
 
     git push                                   # publish changes
     claude plugin marketplace update claude-plugin-marketplace
-    claude plugin update <plugin>              # restart session to apply
+
+To refresh an installed plugin after publishing:
+
+    claude plugin uninstall <plugin>
+    claude plugin install <plugin>@claude-plugin-marketplace
+
+Note: `claude plugin update <plugin>` may report "Plugin not found" -- use uninstall/reinstall instead.
 
 ## Plugins
 
