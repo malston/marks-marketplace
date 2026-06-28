@@ -86,6 +86,13 @@
       "description": "AI engineering helpers: Claude API building reference, prompt lookup, and an official-docs consultant.",
       "version": "0.1.0",
       "author": { "name": "Mark Alston" }
+    },
+    {
+      "name": "engineer-grade-agent-skills",
+      "source": "./engineer-grade-agent-skills",
+      "description": "Production-grade engineering skills (90): clean code, TDD, DDD, architecture, messaging, languages, observability, agents. Vendored from roanbrasil/engineer-grade-agent-skills (MIT).",
+      "version": "2.1.0",
+      "author": { "name": "roanbrasil" }
     }
   ]
 }
