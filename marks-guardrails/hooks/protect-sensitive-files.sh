@@ -46,6 +46,9 @@
 #     - pnpm-lock.yaml, bun.lockb
 #     - Gemfile.lock, poetry.lock, Cargo.lock
 #
+# ALLOWED EXCEPTIONS (exact filename match, checked before PROTECTED PATTERNS):
+#     - .env.example, .env.sample, .env.template - templates with no real values
+#
 # PROTECTED PATTERNS (regex match on full path):
 #     - .env.*                   - All environment files
 #     - /.git/                   - Git internals
@@ -115,6 +118,19 @@ protected_patterns=(
 
 # Get just the filename for exact matching
 filename=$(basename "$file_path")
+
+# Templates with no real values -- exempt from the .env.* pattern block below,
+# checked first so an exact allowlist match always wins over a pattern block.
+allowed_exact=(
+    ".env.example"
+    ".env.sample"
+    ".env.template"
+)
+for allowed in "${allowed_exact[@]}"; do
+    if [[ "$filename" == "$allowed" ]]; then
+        exit 0
+    fi
+done
 
 # Check exact matches
 for protected in "${protected_exact[@]}"; do
