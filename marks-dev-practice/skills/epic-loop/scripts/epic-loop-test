@@ -181,8 +181,20 @@ check "session id in both calls" "2" \
 
 printf '\n=== --hold reaches the skill, not the goal ===\n'
 STUB_EXIT_1=1 STUB_EXIT_2=0 run_driver "$EPIC" --hold >/dev/null 2>&1
-check "skill prompt carries --hold" "1" "$(grep -c "^  arg: /epic-loop $EPIC --hold\$" "$STUB_RECORD")"
+check "skill prompt carries --hold" "1" "$(grep -c "^  arg: /epic-loop $EPIC --hold" "$STUB_RECORD")"
 check "goal prompt does not" "0" "$(grep -c '^  arg: /goal .*--hold' "$STUB_RECORD")"
+
+printf '\n=== the working call is marked as the run itself ===\n'
+# The skill dispatches on this marker: with it the session works beads, without
+# it the session starts a run. A launcher that received it would loop on itself.
+STUB_EXIT_1=1 STUB_EXIT_2=0 run_driver "$EPIC" >/dev/null 2>&1
+check "working prompt carries the run marker" "1" \
+    "$(grep -c "^  arg: /epic-loop $EPIC --worker\$" "$STUB_RECORD")"
+check "goal prompt does not" "0" "$(grep -c '^  arg: /goal .*--worker' "$STUB_RECORD")"
+
+STUB_EXIT_1=1 STUB_EXIT_2=0 run_driver "$EPIC" --hold >/dev/null 2>&1
+check "hold and the run marker both reach the skill" "1" \
+    "$(grep -c "^  arg: /epic-loop $EPIC --hold --worker\$" "$STUB_RECORD")"
 
 printf '\n=== budget and model reach both calls ===\n'
 STUB_EXIT_1=1 STUB_EXIT_2=0 run_driver "$EPIC" \

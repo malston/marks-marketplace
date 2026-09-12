@@ -117,14 +117,21 @@ require_cmd() {
 # stamps "schema_version" -- a {"data": ..., "schema_version": N} envelope
 # around either. Unwrap the envelope first, then reduce a single-element array
 # to the object inside, so every read goes through one shape.
+#
+# A failure is reported as {"error": ..., "schema_version": N} with no data
+# key at all, so the unwrap has to require "data" as well. Keying on
+# schema_version alone turns that object into a null, the error becomes
+# unreadable, and an unknown bead is reported as an unreadable type instead.
 bd_json() {
-    jq -r 'if type == "object" and has("schema_version") then .data else . end
+    jq -r 'if type == "object" and has("schema_version") and has("data")
+           then .data else . end
            | if type == "array" then .[0] else . end'
 }
 
 # The same unwrap for list subcommands, which keep their array.
 bd_json_array() {
-    jq 'if type == "object" and has("schema_version") then .data else . end'
+    jq 'if type == "object" and has("schema_version") and has("data")
+        then .data else . end'
 }
 
 # The skill defines ROOT as the main checkout and forbids nesting a worktree
@@ -304,9 +311,14 @@ main() {
     # Call 2 resumes that session. A leading slash command still expands on a
     # resumed session, and the goal survives the resume, so /epic-loop runs
     # with the completion condition already driving it.
+    #
+    # --worker tells the skill this session is the run. Without it the skill
+    # starts a run instead of working beads, which is what a user gets when
+    # they type /epic-loop in their own session -- and what this call would
+    # get too, spawning a driver that spawns a driver.
     local -a work_cmd=(
         "${claude_prefix[@]}"
-        claude -p "/epic-loop ${epic}${hold:+ $hold}"
+        claude -p "/epic-loop ${epic}${hold:+ $hold} --worker"
         --resume "$session_id"
         --permission-mode bypassPermissions
         --model "$model"
