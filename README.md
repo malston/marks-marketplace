@@ -23,7 +23,7 @@ Note: `claude plugin update <plugin>` may report "Plugin not found" -- use unins
 ## Plugins
 
 - **marks-languages** — per-language coding standards: bash, go, python, rust, typescript
-- **marks-dev-practice** — clean-architecture, TDD, tdd-pr, scoping-context-for-subagents, explain-code skills; test-runner agent; dev-workflow + promptengineering commands
+- **marks-dev-practice** — clean-architecture, TDD, tdd-pr, epic-loop, scoping-context-for-subagents, explain-code skills; test-runner agent; dev-workflow + promptengineering commands
 - **marks-git-workflow** — commit-helper, pr-comments, pr-review-fix, session-notes, investigation-scratchpad skills; commit/create-release/make-local-issue/recovery-prompt/update-memory commands; scratchpad-nudge hook
 - **marks-vault** — Obsidian vault tooling: date-slug-rename, vlt-skill, dream
 - **marks-writing** — the-antislop (detect/fix AI-generated prose)
