@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+#
+# bd-pm-init -- seed a repo's definition of ready.
+#
+# Copies the template to .claude/definition-of-ready.md in the target repo and
+# leaves it there for a person to fill in. The filer, the auditor and the
+# grooming session all read that copy, so the repo owns its own bar rather than
+# inheriting whatever the plugin shipped with.
+#
+#   bd-pm-init                        # current repo
+#   bd-pm-init --repo ~/code/coderay
+#   bd-pm-init --force                # overwrite an existing copy
+#
+set -Eeuo pipefail
+
+PROG="$(basename "$0")"
+readonly PROG
+
+# The template ships beside this script, so resolve it from the script's own
+# location rather than from CLAUDE_PLUGIN_ROOT, which is not reliably exported
+# into every subagent's shell.
+HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly TEMPLATE="${HERE}/../references/definition-of-ready.md"
+
+die() { printf '%s: %s\n' "$PROG" "$*" >&2; exit 1; }
+
+repo=""
+force=0
+
+while (($#)); do
+    case "$1" in
+        --repo)  repo="${2:?--repo needs a directory}"; shift 2 ;;
+        --force) force=1; shift ;;
+        -h|--help)
+            sed -n '3,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *) die "unknown option: $1" ;;
+    esac
+done
+
+[[ -f "$TEMPLATE" ]] || die "template missing at $TEMPLATE"
+
+if [[ -z "$repo" ]]; then
+    repo="$(git rev-parse --show-toplevel 2>/dev/null)" \
+        || die "not in a git repository; pass --repo DIR"
+fi
+
+[[ -d "$repo" ]] || die "no such directory: $repo"
+[[ -d "$repo/.beads" ]] || die "no .beads/ in $repo; run 'bd init' there first"
+
+dest="$repo/.claude/definition-of-ready.md"
+
+if [[ -e "$dest" && $force -eq 0 ]]; then
+    die "$dest already exists; pass --force to overwrite"
+fi
+
+# .claude/ often exists already, but a repo that has only ever used bd will not
+# have one yet.
+mkdir -p -- "$repo/.claude"
+cp -- "$TEMPLATE" "$dest"
+
+printf 'wrote %s\n\n' "$dest"
+printf 'Fill in the "Project specifics" section before filing any beads.\n'
+printf 'An empty test command there means the filer writes acceptance\n'
+printf 'criteria no worker can check.\n'

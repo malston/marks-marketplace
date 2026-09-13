@@ -35,3 +35,4 @@ Note: `claude plugin update <plugin>` may report "Plugin not found" -- use unins
 - **marks-cca** — CCA-Foundations exam prep: format-practice, practice-coach, quiz
 - **marks-ai-eng** — AI engineering helpers: llm-api-builder, prompt-lookup, claude-docs-consultant
 - **engineer-grade-agent-skills** — 90 production engineering skills (clean code, TDD, DDD, architecture, messaging, languages, observability, agents) + 6 commands + a documented pre-commit quality-gate pattern (reference only, not a wired hook); vendored from roanbrasil/engineer-grade-agent-skills (MIT)
+- **beads-pm** — product-manager side of a beads backlog: plan-to-beads, backlog-audit, backlog-groom skills; backlog-filer and backlog-auditor agents

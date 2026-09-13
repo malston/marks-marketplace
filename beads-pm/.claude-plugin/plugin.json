@@ -1,0 +1,9 @@
+{
+  "name": "beads-pm",
+  "version": "0.1.0",
+  "description": "Product-manager side of a beads backlog. Turns an approved plan into a dependency-shaped epic tree, grooms beads into work a fresh agent session can finish, and audits the graph before a worker loop runs against it.",
+  "author": {
+    "name": "Mark Alston"
+  },
+  "keywords": ["beads", "backlog", "planning", "epic-loop", "agents"]
+}

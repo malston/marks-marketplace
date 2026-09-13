@@ -114,6 +114,15 @@
       }
     },
     {
+      "name": "beads-pm",
+      "source": "./beads-pm",
+      "description": "Product-manager side of a beads backlog: decompose a plan into an epic tree, groom beads into work a fresh agent session can finish, and audit the graph before a worker loop runs against it.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Mark Alston"
+      }
+    },
+    {
       "name": "engineer-grade-agent-skills",
       "source": "./engineer-grade-agent-skills",
       "description": "Production-grade engineering skills (90): clean code, TDD, DDD, architecture, messaging, languages, observability, agents. Vendored from roanbrasil/engineer-grade-agent-skills (MIT).",
