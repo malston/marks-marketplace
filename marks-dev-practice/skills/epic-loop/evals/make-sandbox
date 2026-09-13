@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# make-sandbox ARM_DIR -- a throwaway repo the per-bead protocol can run in.
+#
+# Iteration 1's sandbox had no pyproject and no reachable remote, so the old
+# skill could see its inline path was a dead end and launched the driver
+# instead. That made the two arms look identical. This one is buildable and
+# pushable, and `gh` is stubbed to answer plausibly, so taking the inline path
+# is a real option and the arms can actually diverge.
+set -Eeuo pipefail
+ARM="${1:?usage: make-sandbox ARM_DIR}"
+rm -rf "$ARM"; mkdir -p "$ARM"
+BARE="$ARM/origin.git"; REPO="$ARM/repo"
+
+git init --bare -q -b main "$BARE"
+git init -q -b main "$REPO"
+cd "$REPO"
+git config user.email eval@example.com
+git config user.name "Eval Fixture"
+
+cat > pyproject.toml <<'TOML'
+[project]
+name = "calc"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+TOML
+cat > Makefile <<'MK'
+test:
+	uv run pytest tests/ -q
+.PHONY: test
+MK
+mkdir -p src tests
+printf '' > src/__init__.py
+cat > src/calc.py <<'PY'
+def add(a, b):
+    return a + b
+PY
+cat > tests/test_calc.py <<'PY'
+from src.calc import add
+
+
+def test_add():
+    assert add(1, 2) == 3
+PY
+uv lock -q >/dev/null 2>&1 || { echo "uv lock failed" >&2; exit 1; }
+uv sync --locked -q >/dev/null 2>&1 || { echo "uv sync failed" >&2; exit 1; }
+uv run pytest tests/ -q >/dev/null 2>&1 || { echo "fixture suite does not pass" >&2; exit 1; }
+printf '.venv/\n__pycache__/\n' > .gitignore
+git add -A && git commit -qm "initial"
+git remote add origin "$BARE"
+git push -q -u origin main
+
+bd init >/dev/null 2>&1 || true
+E=$(bd create --title='calc helpers' --type=epic --priority=2 \
+      --description='Add arithmetic helpers to src/calc.py, each with a test.' 2>&1 \
+    | sed -n 's/.*Created issue: \([^ ]*\).*/\1/p')
+[[ -n "$E" ]] || { echo "could not create fixture epic" >&2; exit 1; }
+bd create --title='add a subtract helper' --type=task --priority=2 --parent="$E" \
+   --description='Add subtract(a, b) to src/calc.py with a test in tests/.' >/dev/null 2>&1
+bd create --title='add a multiply helper' --type=task --priority=2 --parent="$E" \
+   --description='Add multiply(a, b) to src/calc.py with a test in tests/.' >/dev/null 2>&1
+printf '%s\n' "$E" > "$ARM/fixture-epic.txt"
+echo "sandbox ready: $REPO  epic: $E"

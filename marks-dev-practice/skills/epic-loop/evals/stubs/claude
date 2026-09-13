@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -u
+: "${STUB_RECORD:=/tmp/epic-loop-stub-record.txt}"
+{
+  printf -- '--- stub call ---\n'
+  for a in "$@"; do printf '  arg: %s\n' "$a"; done
+} >>"$STUB_RECORD"
+if printf '%s\n' "$@" | grep -q -- '--resume'; then
+    printf 'STUB: working call ran (no beads were worked)\n'
+    sleep 1
+    exit 0
+fi
+printf 'STUB: arming call ran\n'
+exit 0

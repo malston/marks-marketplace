@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+#
+# run-comparison -- does this version of the skill still launch a run instead
+# of working beads itself?
+#
+# Builds two throwaway repos, runs the skill against one and a baseline copy
+# against the other, grades both from what they left behind, and prints the
+# table. Both arms are sealed: a stub claude and a stub gh sit first on PATH,
+# so nothing reaches the API or GitHub no matter what either arm decides to do.
+#
+#   run-comparison --smoke                      # build and probe only; spends nothing
+#   run-comparison --baseline PATH              # compare against another copy of the skill
+#   run-comparison --baseline PATH --out DIR    # keep the results somewhere of your choosing
+#
+# Without --baseline it runs the skill arm alone, which answers "does it still
+# behave" without answering "is it better than what came before".
+#
+# A full comparison costs roughly $8 and takes about eight minutes. The
+# baseline arm is the expensive half: when it works beads inline it burns turns
+# until it hits the cap.
+#
+set -Eeuo pipefail
+PROG="$(basename "$0")"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKILL="$(dirname "$HERE")"
+
+die()  { printf '%s: %s\n' "$PROG" "$*" >&2; exit 1; }
+note() { printf '%s\n' "$*" >&2; }
+
+usage() { sed -n '2,/^set -Eeuo/p' "$0" | sed 's/^# \{0,1\}//; $d'; }
+
+baseline="" out="" smoke=false
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --smoke)    smoke=true; shift ;;
+        --baseline) baseline="${2:?--baseline needs a directory}"; shift 2 ;;
+        --out)      out="${2:?--out needs a directory}"; shift 2 ;;
+        -h|--help)  usage; exit 0 ;;
+        *)          die "unknown option: $1 (try --help)" ;;
+    esac
+done
+
+for c in claude bd gh git jq uv python3; do
+    command -v "$c" >/dev/null 2>&1 || die "required command not found: $c"
+done
+[[ -f "$SKILL/SKILL.md" ]] || die "cannot find SKILL.md above $HERE"
+[[ -z "$baseline" || -f "$baseline/SKILL.md" ]] || die "no SKILL.md in baseline: $baseline"
+
+[[ -n "$out" ]] || out="$(mktemp -d -t epic-loop-eval)"
+mkdir -p "$out"
+EV="$out/eval-0-launch-from-session"
+
+arms=(with_skill); paths=("$SKILL")
+if [[ -n "$baseline" ]]; then arms+=(old_skill); paths+=("$baseline"); fi
+
+note "skill:    $SKILL"
+note "baseline: ${baseline:-(none; skill arm only)}"
+note "results:  $out"
+note ""
+
+for i in "${!arms[@]}"; do
+    mkdir -p "$EV/${arms[$i]}/outputs"
+    note "building sandbox for ${arms[$i]}..."
+    "$HERE/make-sandbox" "$EV/${arms[$i]}/sandbox" >/dev/null \
+        || die "could not build the sandbox for ${arms[$i]}"
+done
+
+if [[ "$smoke" == true ]]; then
+    note ""
+    note "smoke test: sandboxes build, the per-bead protocol runs in them, and"
+    note "the stubs answer. No arm was launched and nothing was spent."
+    R="$EV/${arms[0]}/sandbox/repo"
+    export PATH="$HERE/stubs:$PATH" STUB_RECORD="$out/smoke-record.txt"
+    : >"$STUB_RECORD"
+    git -C "$R" worktree add --no-track -b smoke "$R/.claude/worktrees/smoke" origin/main >/dev/null 2>&1 \
+        || die "worktree add failed in the sandbox"
+    (cd "$R/.claude/worktrees/smoke" && uv sync --locked -q >/dev/null 2>&1) \
+        || die "uv sync failed in the sandbox worktree"
+    (cd "$R/.claude/worktrees/smoke" && uv run pytest tests/ -q >/dev/null 2>&1) \
+        || die "the fixture suite does not pass in the sandbox worktree"
+    (cd "$R" && gh pr create --title t --body b >/dev/null) || die "the gh stub did not answer"
+    [[ "$(command -v claude)" == "$HERE/stubs/claude" ]] \
+        || die "the claude stub is not first on PATH"
+    "$SKILL/scripts/epic-loop" "$(cat "$EV/${arms[0]}/sandbox/fixture-epic.txt")" \
+        --repo "$R" --dry-run >/dev/null || die "the driver refused the fixture epic"
+    note ""
+    note "PASS -- worktree, uv sync, pytest, gh stub, claude stub and driver preflight all work."
+    note "results: $out"
+    exit 0
+fi
+
+for i in "${!arms[@]}"; do
+    note "running ${arms[$i]}..."
+    "$HERE/run-arm" "$EV/${arms[$i]}" "${paths[$i]}" >/dev/null 2>&1 &
+done
+wait
+note ""
+
+printf '\n%-12s %-9s %-8s %-7s %s\n' arm passed time turns cost
+for a in "${arms[@]}"; do
+    "$HERE/grade-arm" "$EV/$a" >/dev/null || die "could not grade $a"
+    printf '%-12s %-9s %-8s %-7s $%s\n' "$a" \
+        "$(jq -r '"\([.expectations[]|select(.passed)]|length)/\(.expectations|length)"' "$EV/$a/grading.json")" \
+        "$(jq -r '"\(.total_duration_seconds|floor)s"' "$EV/$a/timing.json")" \
+        "$(jq -r '.num_turns' "$EV/$a/timing.json")" \
+        "$(jq -r '.total_cost_usd|.*100|round/100' "$EV/$a/timing.json")"
+done
+printf '\nresults: %s\n' "$out"
