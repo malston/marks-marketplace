@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# grade-arm ARM_DIR -- score one eval arm from its artifacts, not its prose.
+# Writes grading.json and timing.json. Reusable across iterations.
+set -Eeuo pipefail
+ARM="${1:?usage: grade-arm ARM_DIR}"
+OUT="$ARM/outputs"; REC="$OUT/stub-record.txt"; POST="$OUT/post-state.txt"
+MSG="$(jq -r '.result // ""' "$OUT/result.json" 2>/dev/null || true)"
+
+# Claude Code makes its own internal haiku calls; only calls carrying a slash
+# command are the launcher's.
+work_calls=$(grep -c '^  arg: /epic-loop ' "$REC" || true)
+goal_calls=$(grep -c '^  arg: /goal ' "$REC" || true)
+resume_calls=$(grep -c -- '^  arg: --resume$' "$REC" || true)
+marker=$(grep -c '^  arg: /epic-loop .* --worker$' "$REC" || true)
+worktrees=$(grep -c '^/' "$POST" || true)
+nonopen=$(sed -n '/child bead status/,/epic notes/p' "$POST" | grep -cv $'\topen' | awk '{print $1-2}')
+branches=$(sed -n '/git branch -a/,/child bead/p' "$POST" | grep -cE '^\*? +[a-z]' || true)
+has_log=$(printf '%s' "$MSG" | grep -c '\.log' || true)
+has_resume=$(printf '%s' "$MSG" | grep -c 'claude --resume' || true)
+
+j() { printf '    {"text": "%s", "passed": %s, "evidence": "%s"}' "$1" "$2" "$3"; }
+{
+ echo '{'; echo '  "expectations": ['
+ j "Armed the goal before the working call" "$([ "$goal_calls" -eq 1 ] && echo true || echo false)" "/goal calls: $goal_calls"; echo ','
+ j "Launched exactly one background run" "$([ "$resume_calls" -eq 1 ] && echo true || echo false)" "--resume calls: $resume_calls"; echo ','
+ j "The working call carries the --worker run marker" "$([ "$marker" -eq 1 ] && echo true || echo false)" "marked working calls: $marker of $work_calls"; echo ','
+ j "Created no worktree in the target repo" "$([ "$worktrees" -eq 1 ] && echo true || echo false)" "worktree list entries: $worktrees (1 = main checkout only)"; echo ','
+ j "Claimed no beads" "$([ "$nonopen" -eq 0 ] && echo true || echo false)" "children not open: $nonopen"; echo ','
+ j "Left only the main branch" "$([ "$branches" -le 2 ] && echo true || echo false)" "branch lines: $branches"; echo ','
+ j "Reported a log path" "$([ "$has_log" -ge 1 ] && echo true || echo false)" "log mentions: $has_log"; echo ','
+ j "Reported a resume command" "$([ "$has_resume" -ge 1 ] && echo true || echo false)" "resume mentions: $has_resume"; echo
+ echo '  ]'; echo '}'
+} > "$OUT/../grading.json"
+
+jq '{total_tokens: ((.usage.input_tokens // 0) + (.usage.output_tokens // 0)),
+     duration_ms: (.duration_ms // 0),
+     total_duration_seconds: ((.duration_ms // 0) / 1000),
+     total_cost_usd: (.total_cost_usd // 0),
+     num_turns: (.num_turns // 0)}' "$OUT/result.json" > "$OUT/../timing.json" 2>/dev/null \
+  || echo '{}' > "$OUT/../timing.json"
+echo "graded: $ARM"

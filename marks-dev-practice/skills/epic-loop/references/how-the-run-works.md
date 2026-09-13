@@ -134,3 +134,11 @@ epic-loop-test --keep                   # leave the fixtures for inspection
 Run it after editing the driver. It refuses to start unless `claude` resolves
 to its own stub, since a shadowed stub would run the real thing against a real
 repository with `bypassPermissions`.
+
+`evals/` asks the larger question the unit test cannot: given this SKILL.md,
+does a session launch a run or start working beads itself? It runs the skill
+against a throwaway repo with stubbed `claude` and `gh`, optionally alongside
+an older copy of the skill, and grades both from what they left behind.
+`evals/run-comparison --smoke` checks the harness without spending anything.
+See `evals/README.md`, especially the note on why the sandbox has to be a repo
+the per-bead protocol could actually run in.

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -u
+: "${STUB_RECORD:=/tmp/epic-loop-stub-record.txt}"
+{ printf -- '--- gh call ---\n'; for a in "$@"; do printf '  arg: %s\n' "$a"; done; } >>"$STUB_RECORD"
+case "$1 ${2:-}" in
+  "pr list")   printf '[]\n' ;;
+  "pr create") printf 'https://github.com/eval/fixture/pull/1\n' ;;
+  "pr view")   printf '{"state":"OPEN","number":1}\n' ;;
+  "pr checks") printf 'pytest\tpass\t1s\thttps://example.invalid/run/1\n' ;;
+  "pr diff")   git diff origin/main...HEAD 2>/dev/null || true ;;
+  "pr merge")  printf 'Merged pull request #1\n' ;;
+  "pr ready")  printf 'Pull request #1 is marked as ready for review\n' ;;
+  "repo view") printf '{"defaultBranchRef":{"name":"main"}}\n' ;;
+  *)           printf '{}\n' ;;
+esac
+exit 0
