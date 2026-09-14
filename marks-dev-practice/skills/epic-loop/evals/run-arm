@@ -55,5 +55,8 @@ env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN \
   echo "=== epic notes ==="
   (cd "$REPO" && bd show "$EPIC" --json | jq -r 'if type=="array" then .[0] else . end | .notes // "(none)"' 2>/dev/null \
      || echo "(unreadable)")
+  echo "=== epic labels ==="
+  (cd "$REPO" && bd show "$EPIC" --json | jq -r 'if type=="array" then .[0] else . end | (.labels // []) | join(",")' 2>/dev/null \
+     || echo "(unreadable)")
 } >"$OUT/post-state.txt" 2>&1
 echo "arm done: $ARM"

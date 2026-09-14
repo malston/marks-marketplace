@@ -71,7 +71,7 @@ loop spends turns fast: one bead runs a failing test, a mutation round, a PR, a
 fresh-context review and a fix commit.
 
 The turn counter in the goal condition is a different number. It lives in the
-parent bead's notes so a resumed session does not reset it, and the skill
+parent bead as a `turns-<N>` label so a resumed session does not reset it, and the skill
 rewrites it at the end of every turn.
 
 ## The API key
