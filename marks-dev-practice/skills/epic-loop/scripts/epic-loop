@@ -20,9 +20,10 @@
 #   epic-loop other-abc --repo ~/code/otherproj
 #   epic-loop coderay-q2r --dry-run      # print the calls, spend nothing
 #
-# Exit status is the status of the /epic-loop call. A nonzero there usually
-# means the turn or budget cap stopped the run; the session id is printed so
-# you can pick it up with: claude --resume <session-id>
+# Exit status is the status of the /epic-loop call, or 1 when the goal-arming
+# call fails and the run never starts. A nonzero from /epic-loop usually means
+# the turn or budget cap stopped the run; the session id is printed so you can
+# pick it up with: claude --resume <session-id>
 #
 set -Eeuo pipefail
 
@@ -305,7 +306,7 @@ main() {
         --max-budget-usd "$budget"
         --max-turns 1
         --disallowedTools "$ARM_DENIED_TOOLS"
-        --output-format text
+        --output-format json
     )
 
     # Call 2 resumes that session. A leading slash command still expands on a
@@ -373,10 +374,31 @@ EOF
 
     local started=$SECONDS
     note "arming goal: $(date -u +%H:%M:%S)Z"
-    # The one-turn cap makes exit 1 the normal outcome here, so the failure we
-    # actually care about is the goal not being recorded -- which shows up as
-    # call 2 running without it.
-    "${arm_cmd[@]}" >>"$log_file" 2>&1 || true
+    # The arming call exits 1 on a healthy run: /goal tells the model to start
+    # work, its first tool call spends the one turn, and the result is the
+    # max-turns stop. An auth or credit failure exits 1 too, so the exit code
+    # says nothing and the JSON result decides.
+    local arm_out arm_verdict
+    arm_out="$("${arm_cmd[@]}" 2>>"$log_file")" || true
+    arm_verdict="$(printf '%s' "$arm_out" | jq -r '
+        if .subtype == "error_max_turns" then "cap"
+        elif .subtype == "success" and .is_error == false then "ok"
+        else "fail" end' 2>/dev/null)" || arm_verdict=fail
+    [[ -n "$arm_verdict" ]] || arm_verdict=fail
+
+    case "$arm_verdict" in
+        cap) printf 'arming call stopped at its one-turn cap, as expected\n' >>"$log_file" ;;
+        ok)  printf 'arming call finished its turn\n' >>"$log_file" ;;
+        *)
+            printf 'arming call failed:\n%s\n' "${arm_out:-(no output)}" >>"$log_file"
+            local arm_reason
+            arm_reason="$(printf '%s' "$arm_out" \
+                | jq -r '.result // .errors[0] // empty' 2>/dev/null)" || arm_reason=""
+            die "the goal-arming call failed, so the run did not start:
+  ${arm_reason:-${arm_out:-(no output)}}
+  full result: $log_file"
+            ;;
+    esac
 
     note "working epic: $(date -u +%H:%M:%S)Z"
     local rc=0
