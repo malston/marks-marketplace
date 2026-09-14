@@ -77,7 +77,15 @@ Run `bd show $EPIC` first. Its DESIGN field may carry epic-specific instructions
 
 A `/goal` re-evaluates the completion condition after every turn, waits for background review agents before judging, and survives a resumed session. The counter it stops at lives in the epic so a resumed session does not reset it.
 
-End every turn, whatever else happened in it, by reading the epic's notes with `bd show $EPIC --json`, replacing the `turns: N` line (or appending one if absent), and writing the whole notes field back with `bd update $EPIC --notes "..."`. Notes is a single field and the user keeps their own remarks in it, so never write only the counter.
+The counter is a label, not a line in the notes. End every turn, whatever else happened in it, with one call:
+
+```bash
+bd update $EPIC --add-label turns-<N> --remove-label turns-<N-1>
+```
+
+Read it back from `bd show $EPIC --json` as the highest `turns-*` label, tolerating two: a turn that died between the add and the remove leaves both, and the run continues on the higher one rather than stopping.
+
+It is a label because it used to be a line inside the notes field, maintained by reading that field, editing the line and writing the whole thing back. A run did that as a plain `--notes "turns: 5"` and the epic's own notes were gone, with nothing recording what they had said. `--add-label` cannot reach the notes field, so the mistake is no longer available. Never write the counter into notes, and never use `--notes` on the epic at all: the only safe write to that field is `--append-notes`.
 
 If no goal is active, keep going anyway. End each turn by picking up the next bead, and stop only at the stop condition at the bottom of this file.
 
@@ -109,22 +117,29 @@ Review findings you don't fix go under a sibling epic, never under `$EPIC`. On t
 
 7. **Land or hold.**
    - Merge mode: `gh pr merge <n> --merge` (a merge commit, not a squash, so the branch tip stays reachable from `origin/main`). Back in `$ROOT`, `git fetch origin`. Once `git branch -r --contains <branch>` lists `origin/main`, `git worktree remove $ROOT/.claude/worktrees/<bead-id>` and `git branch -D <branch>`. The remote branch stays. `bd close <id> --reason="PR <n>: ..."` including any trim, then `bd show <id>` to confirm the status changed. Then the next bead.
-   - Hold mode: `gh pr ready <n>` if it's a draft. `bd update <id> --status blocked` and append a line `held: PR <n>` to the bead's notes, preserving whatever is already there. Leave the worktree and branch in place. Then the next non-overlapping bead. The cleanup and close happen in step 1 of a later pass once the PR has merged.
+   - Hold mode: `gh pr ready <n>` if it's a draft. `bd update <id> --status blocked --append-notes "held: PR <n>"`, which keeps whatever the notes already held. Leave the worktree and branch in place. Then the next non-overlapping bead. The cleanup and close happen in step 1 of a later pass once the PR has merged.
 
 ### Stopping early
 
-A goal re-prompts a session that only says it has stopped, and the run carries on to the next bead. To stop before the epic is settled, read the epic's notes, append a line `halted: <reason>`, and set the `turns:` line to the number the goal condition itself names as the counter it stops at, which is not always 20. That replaces the counter write [the turn counter](#the-turn-counter) asks for, for this turn only. Write the whole notes field back, report the reason and what a person has to look at, and end the turn.
+A goal re-prompts a session that only says it has stopped, and the run carries on to the next bead. To stop before the epic is settled, take the number the goal condition itself names as the counter it stops at, which is not always 20, and make that the label:
 
-Say in the report that a later run needs the `halted:` line removed and the `turns:` line set back to the real count, since the goal otherwise reads the epic as finished the moment it starts.
+```bash
+bd update $EPIC --add-label turns-<cap> --remove-label turns-<N> \
+               --append-notes "halted: <reason>"
+```
+
+That replaces the counter write [the turn counter](#the-turn-counter) asks for, for this turn only. `--append-notes` adds the reason on its own line and keeps whatever the notes already held. Then report the reason and what a person has to look at, and end the turn.
+
+Say in the report that a later run needs the `halted:` line removed and the `turns-<cap>` label replaced with the real count, since the goal otherwise reads the epic as finished the moment it starts.
 
 ### Decision beads
 
-A bead that asks whether to keep or delete code, or that has an open design question, isn't yours to decide. Investigate, write the recommendation with `bd update <id> --notes`, run `bd tag <id> human` (listed by `bd human list`; `bd human <id>` on its own only prints a help menu), and move on. Never delete code that seems unused or rewrite an implementation without the user.
+A bead that asks whether to keep or delete code, or that has an open design question, isn't yours to decide. Investigate, write the recommendation with `bd update <id> --append-notes`, run `bd tag <id> human` (listed by `bd human list`; `bd human <id>` on its own only prints a help menu), and move on. Never delete code that seems unused or rewrite an implementation without the user.
 
 ### Never
 
 - Edit a bead's title or description. Trims go in the PR body and close reason.
-- Overwrite a notes field. Read it, change your line, write the whole thing back.
+- Write a notes field with `--notes`. Add to it with `--append-notes`, which keeps what is there.
 - Base a worktree on another PR's branch.
 - File a finding under `$EPIC`.
 - Review a diff from the session that wrote it.
