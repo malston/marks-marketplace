@@ -32,6 +32,14 @@ at one turn. Without that it starts satisfying the goal in the arming call
 itself, working beads before the loop protocol is loaded. The goal is still
 recorded, and it survives both the cap and the denial.
 
+So a healthy arming call ends on `Reached max turns (1)` and exits 1: `/goal`
+tells the model to start working, and its first tool call spends the one turn.
+An auth or credit failure exits 1 as well, so the driver asks for
+`--output-format json` and reads the result instead of the exit code. A
+`subtype` of `error_max_turns`, or a `success` with `is_error` false, lets the
+run go on, and the log says the cap was expected. Anything else stops the run
+before the working call, with the result's message on stderr and in the log.
+
 The condition to arm:
 
 ```text
@@ -84,7 +92,7 @@ spend. **Typing the calls by hand carries the same risk**, so prefix them with
 `scripts/epic-loop` assembles both calls. Run it from anywhere; the target repo
 comes from `--repo`, or from the git root of the current directory.
 
-```
+```bash
 epic-loop BEAD-ID [options]
 
   --hold               Stop each bead at ready-for-review; never merge
@@ -108,7 +116,8 @@ not nest them. It checks that `claude`, `bd`, `gh`, `jq`, `git` and `uuidgen`
 are all present.
 
 It logs each run and prints the resume command when a cap stops it. Exit status
-is the status of the working call; nonzero usually means a cap, not a fault.
+is the status of the working call; nonzero usually means a cap, not a fault. A
+failed arming call exits 1 before the working call starts.
 
 ### bd's JSON shapes
 

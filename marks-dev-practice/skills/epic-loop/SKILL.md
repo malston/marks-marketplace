@@ -17,8 +17,8 @@ Work the open children of a beads epic, one at a time, until every one is closed
 
 Read `$ARGUMENTS` before anything else. The bead id is the first word that is not a flag, and it can appear anywhere in the line.
 
-* **`--worker` is present.** You are the run. Skip to [Working the run](#working-the-run) and follow it to the end. Everything in the next section is for a session that has not started yet.
-* **`--worker` is absent.** Someone typed this in their own session. You are starting a run, not working beads. Follow [Starting a run](#starting-a-run) and stop there.
+- **`--worker` is present.** You are the run. Skip to [Working the run](#working-the-run) and follow it to the end. Everything in the next section is for a session that has not started yet.
+- **`--worker` is absent.** Someone typed this in their own session. You are starting a run, not working beads. Follow [Starting a run](#starting-a-run) and stop there.
 
 The distinction matters because the two jobs look alike and the failure is expensive: a session that mistakes itself for the launcher spawns a run that spawns a run.
 
@@ -83,7 +83,7 @@ If no goal is active, keep going anyway. End each turn by picking up the next be
 
 ### Paths
 
-`ROOT` is the main checkout, `git rev-parse --show-toplevel` run from where the session started. Worktrees live at `$ROOT/.claude/worktrees/<bead-id>`, always as absolute paths so a worktree is never created inside another. The main checkout belongs to the user. Never switch its branch, and never run a bare `git stash` (the stash stack is shared across worktrees).
+`ROOT` is the main checkout, `git rev-parse --show-toplevel` run from where the session started. Worktrees live at `$ROOT/.claude/worktrees/<bead-id>`, and a review's throwaway worktree at `$ROOT/.claude/worktrees/review-<n>-<tag>`, always as absolute paths so a worktree is never created inside another. The main checkout belongs to the user. Never switch its branch, and never run a bare `git stash` (the stash stack is shared across worktrees).
 
 ### Findings epic
 
@@ -91,7 +91,7 @@ Review findings you don't fix go under a sibling epic, never under `$EPIC`. On t
 
 ### Per bead
 
-1. **Pick and isolate.** From `$ROOT`, `git fetch origin`. List open PRs from this loop (`gh pr list --label epic-loop --json number,headRefName,files`). For each held PR whose bead is blocked, check `gh pr view <n> --json state`. If it merged, remove its worktree and branch as in step 7 and `bd close` its bead with the PR number. Then pick the next open bead whose files don't overlap any still-open PR from this loop. If every remaining bead overlaps an open PR, report which PRs need to land and stop. Never base a worktree on another PR's branch. Create the worktree with `git worktree add --no-track -b <branch> $ROOT/.claude/worktrees/<bead-id> origin/main` (`--no-track` so `git push -u origin <branch>` works). If `git worktree list` already shows one for this bead, reuse it. `cd` into it, `uv sync --locked`, and run steps 2 to 6 from there.
+1. **Pick and isolate.** From `$ROOT`, `git fetch origin`. List open PRs from this loop (`gh pr list --label epic-loop --json number,headRefName,files`). For each held PR whose bead is blocked, check `gh pr view <n> --json state`. If it merged, remove its worktree and branch as in step 7 and `bd close` its bead with the PR number. Then pick the next open bead whose files don't overlap any still-open PR from this loop. If every remaining bead overlaps an open PR, report which PRs need to land and [stop early](#stopping-early). Never base a worktree on another PR's branch. Create the worktree with `git worktree add --no-track -b <branch> $ROOT/.claude/worktrees/<bead-id> origin/main` (`--no-track` so `git push -u origin <branch>` works). If `git worktree list` already shows one for this bead, reuse it. `cd` into it, `uv sync --locked`, and run steps 2 to 6 from there, except step 5's probe and dispatch bullets.
 
 2. **Claim and scope.** `bd update <id> --claim`. Re-read the bead. If an earlier PR already covered part of it, don't edit the bead's title or description. Write down exactly what you're dropping and why, and carry that into the PR body's "Trimmed" section and the bead's close reason. Batch beads that share a file into one PR and say so in the body.
 
@@ -99,13 +99,23 @@ Review findings you don't fix go under a sibling epic, never under `$EPIC`. On t
 
 4. **Open the PR.** `git push -u origin <branch>`, then `gh pr create --label epic-loop` with these sections: what changed, trimmed (what was dropped from the bead and why, or "nothing"), decisions left for the user, tests (red and green counts, mutations), verified by hand, what stays as is. Wait for CI in two steps. `gh pr checks <n> --watch` on its own returns at once before CI has registered the run, so first poll until the check exists (`until gh pr checks <n> | grep -q pytest; do sleep 10; done`), then `gh pr checks <n> --watch`.
 
-5. **Review in a fresh context.** Dispatch a subagent whose entire prompt is the PR number and the instruction to run `/code-review <n> medium` against `gh pr diff <n>` and `git show origin/<branch>:<path>`, never the working tree. Pass it nothing from this session. Its output is the review. If the PR carries a bead of priority P0, P1, P2 or P3, also run `/pr-review-toolkit:review-pr <n>` with the same read-from-remote instruction. A PR whose beads are all P4 stops at the fresh-context `/code-review`. Stay in the bead's worktree until its fixes are pushed.
+5. **Review in a fresh context, from a review worktree.** A review agent, and any reviewer a skill starts inside it, works in the directory this session is in when the agent is dispatched, and none of them sees the instructions you give the agent. `/code-review` has checked out a PR branch in the checkout it started in. A throwaway review worktree gives that nowhere harmful to land. Two things it does not do: the session's own directory drifts back to `$ROOT` on its own, which is how the first such checkout happened, and a reviewer can still reach any checkout by its path. Hence the probe and the comparison below. Run one review at a time, each in its own worktree, and treat `<tag>` as the review's name (`code-review`, `review-pr`).
+   - **Before each review.** `git fetch origin <branch>`; on a failure retry once, and if it fails again report it and pick up the next bead, leaving this one claimed. Clear anything a killed run left: `git worktree remove -f -f $ROOT/.claude/worktrees/review-<n>-<tag> 2>/dev/null; rm -rf $ROOT/.claude/worktrees/review-<n>-<tag>; git worktree prune`. Then `git worktree add --detach $ROOT/.claude/worktrees/review-<n>-<tag> origin/<branch>` and `cd` into it. Record, for `$ROOT` and for the bead's worktree, `git -C <dir> rev-parse HEAD` and `git -C <dir> symbolic-ref -q --short HEAD || echo '(detached)'`, plus `git -C <bead's worktree> status --porcelain`. Two things stay out of the comparison, so say so in the review round rather than relying on them: `$ROOT`'s uncommitted files, since the user may be editing there, and any local branch a reviewer creates, since `/code-review` makes a `pr<n>` branch on a healthy run.
+   - **Probe.** Dispatch a throwaway agent whose whole prompt is to run `pwd` and report it. If it does not name the review worktree, the directory did not move, so [stop early](#stopping-early) instead of dispatching the review.
+   - **Dispatch.** A subagent whose entire prompt is the PR number and the instruction to run `/code-review medium <n>` (the level comes before the target) against `gh pr diff <n>` and `git show origin/<branch>:<path>`. Pass it nothing from this session. Its output is the review. If the PR carries a bead of priority P0, P1, P2 or P3, repeat this bullet and the two around it for `/pr-review-toolkit:review-pr <n>`, in its own worktree, once the first review is back. A PR whose beads are all P4 stops at `/code-review`. Do not `cd` away until the review has returned its output.
+   - **After each review.** Only once the review is back, run the recorded commands again. If any value differs, name any leftover `review-<n>-*` worktree and [stop early](#stopping-early), naming the checkout and what changed, and leave that checkout as it is. Otherwise `cd` to the bead's worktree, `git worktree remove -f -f $ROOT/.claude/worktrees/review-<n>-<tag>`, and name in the PR body's review round any local branch that `git branch --format='%(refname:short)'` now shows and the record did not. Delete none of them. Stay in the bead's worktree until the bead's fixes are pushed.
 
 6. **Fix or file.** Fix every finding the reviews label Critical, Important or HIGH, and any finding that is a correctness or security defect whatever its label, in one review commit. Re-run checks. Add a "Review round" section to the PR body. File everything else under the findings epic after `bd search` for a duplicate, P3 for behavioural, P4 for style or simplification, with "PR <n> review" in the description. Findings outside the bead's scope are filed, never fixed in this PR.
 
 7. **Land or hold.**
-   * Merge mode: `gh pr merge <n> --merge` (a merge commit, not a squash, so the branch tip stays reachable from `origin/main`). Back in `$ROOT`, `git fetch origin`. Once `git branch -r --contains <branch>` lists `origin/main`, `git worktree remove $ROOT/.claude/worktrees/<bead-id>` and `git branch -D <branch>`. The remote branch stays. `bd close <id> --reason="PR <n>: ..."` including any trim, then `bd show <id>` to confirm the status changed. Then the next bead.
-   * Hold mode: `gh pr ready <n>` if it's a draft. `bd update <id> --status blocked` and append a line `held: PR <n>` to the bead's notes, preserving whatever is already there. Leave the worktree and branch in place. Then the next non-overlapping bead. The cleanup and close happen in step 1 of a later pass once the PR has merged.
+   - Merge mode: `gh pr merge <n> --merge` (a merge commit, not a squash, so the branch tip stays reachable from `origin/main`). Back in `$ROOT`, `git fetch origin`. Once `git branch -r --contains <branch>` lists `origin/main`, `git worktree remove $ROOT/.claude/worktrees/<bead-id>` and `git branch -D <branch>`. The remote branch stays. `bd close <id> --reason="PR <n>: ..."` including any trim, then `bd show <id>` to confirm the status changed. Then the next bead.
+   - Hold mode: `gh pr ready <n>` if it's a draft. `bd update <id> --status blocked` and append a line `held: PR <n>` to the bead's notes, preserving whatever is already there. Leave the worktree and branch in place. Then the next non-overlapping bead. The cleanup and close happen in step 1 of a later pass once the PR has merged.
+
+### Stopping early
+
+A goal re-prompts a session that only says it has stopped, and the run carries on to the next bead. To stop before the epic is settled, read the epic's notes, append a line `halted: <reason>`, and set the `turns:` line to the number the goal condition itself names as the counter it stops at, which is not always 20. That replaces the counter write [the turn counter](#the-turn-counter) asks for, for this turn only. Write the whole notes field back, report the reason and what a person has to look at, and end the turn.
+
+Say in the report that a later run needs the `halted:` line removed and the `turns:` line set back to the real count, since the goal otherwise reads the epic as finished the moment it starts.
 
 ### Decision beads
 
@@ -113,13 +123,14 @@ A bead that asks whether to keep or delete code, or that has an open design ques
 
 ### Never
 
-* Edit a bead's title or description. Trims go in the PR body and close reason.
-* Overwrite a notes field. Read it, change your line, write the whole thing back.
-* Base a worktree on another PR's branch.
-* File a finding under `$EPIC`.
-* Review a diff from the session that wrote it.
-* Merge in hold mode.
-* Bump the version, tag, or cut a release.
+- Edit a bead's title or description. Trims go in the PR body and close reason.
+- Overwrite a notes field. Read it, change your line, write the whole thing back.
+- Base a worktree on another PR's branch.
+- File a finding under `$EPIC`.
+- Review a diff from the session that wrote it.
+- Dispatch a review agent from `$ROOT` or a bead's worktree.
+- Merge in hold mode.
+- Bump the version, tag, or cut a release.
 
 ### Stop
 

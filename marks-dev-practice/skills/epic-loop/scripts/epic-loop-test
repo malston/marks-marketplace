@@ -61,7 +61,10 @@ if printf '%s\n' "$@" | grep -q -- '--resume'; then
     printf 'STUB: resume call ran\n'
     exit "${STUB_EXIT_2:-0}"
 fi
-printf 'STUB: arming call ran\n'
+# The arming call reports a JSON result. Unset, it is the one-turn cap a healthy
+# arming ends on; a test sets STUB_ARM_REPLY, empty included, for anything else.
+cap_reply='{"type":"result","subtype":"error_max_turns","is_error":true,"errors":["Reached maximum number of turns (1)"]}'
+printf '%s\n' "${STUB_ARM_REPLY-$cap_reply}"
 exit "${STUB_EXIT_1:-1}"
 STUB
 chmod +x "$STUB_DIR/claude"
@@ -208,6 +211,41 @@ check "a feature parent is accepted" "0" "$?"
 check "summary names the real type" "1" "$(grep -c "($FEATURE_KIND, " "$WORK/t6.out")"
 check "goal text names the real type" "1" "$(grep -c "beads $FEATURE_KIND $FEATURE " "$STUB_RECORD")"
 check "turn counter names the real type" "1" "$(grep -c "the $FEATURE_KIND's turn counter" "$STUB_RECORD")"
+
+stub_calls() {
+    [[ -f "$STUB_RECORD" ]] && grep -c -- '--- stub call ---' "$STUB_RECORD" || printf '0'
+}
+
+printf '\n=== the arming call reports JSON, and its one-turn cap is expected ===\n'
+STUB_EXIT_1=1 STUB_EXIT_2=0 run_driver "$EPIC" >"$WORK/t10.out" 2>&1
+check "driver exits 0 after the cap" "0" "$?"
+check "arming call asks for a JSON result" "1" "$(grep -c '^  arg: json$' "$STUB_RECORD")"
+check "log says the cap was expected" "1" \
+    "$(grep -c 'arming call stopped at its one-turn cap, as expected' "$WORK"/logs/*.log)"
+check "raw cap result kept out of the log" "0" "$(grep -c 'error_max_turns' "$WORK"/logs/*.log)"
+
+printf '\n=== an arming call that finishes its one turn cleanly is fine ===\n'
+STUB_ARM_REPLY='{"type":"result","subtype":"success","is_error":false,"result":"Goal acknowledged."}' \
+    STUB_EXIT_1=0 STUB_EXIT_2=0 run_driver "$EPIC" >"$WORK/t11.out" 2>&1
+check "driver exits 0" "0" "$?"
+check "working call still runs" "2" "$(stub_calls)"
+
+printf '\n=== any other arming outcome stops the run before the working call ===\n'
+STUB_ARM_REPLY='{"type":"result","subtype":"success","is_error":true,"result":"Credit balance is too low"}' \
+    STUB_EXIT_1=1 STUB_EXIT_2=0 run_driver "$EPIC" >"$WORK/t12.out" 2>&1
+check "an error result stops the driver" "1" "$?"
+check "working call never ran after an error result" "1" "$(stub_calls)"
+check "message quotes the failure" "1" "$(grep -c 'Credit balance is too low' "$WORK/t12.out")"
+check "failure reaches the log" "1" "$(grep -c 'Credit balance is too low' "$WORK"/logs/*.log)"
+
+STUB_ARM_REPLY='not json at all' STUB_EXIT_1=1 STUB_EXIT_2=0 run_driver "$EPIC" >"$WORK/t13.out" 2>&1
+check "unreadable output stops the driver" "1" "$?"
+check "working call never ran after unreadable output" "1" "$(stub_calls)"
+check "message shows what came back" "1" "$(grep -c 'not json at all' "$WORK/t13.out")"
+
+STUB_ARM_REPLY='' STUB_EXIT_1=1 STUB_EXIT_2=0 run_driver "$EPIC" >"$WORK/t14.out" 2>&1
+check "empty output stops the driver" "1" "$?"
+check "working call never ran after empty output" "1" "$(stub_calls)"
 
 printf '\n=== a childless bead is refused ===\n'
 "$DRIVER" "$CHILDLESS" --repo "$REPO" --dry-run >"$WORK/t7.out" 2>&1
