@@ -40,6 +40,16 @@ An auth or credit failure exits 1 as well, so the driver asks for
 run go on, and the log says the cap was expected. Anything else stops the run
 before the working call, with the result's message on stderr and in the log.
 
+The goal carries into the resumed working call and re-evaluates after every
+turn there: when the model stops, the condition is checked, and while it is
+unmet the model is re-prompted to work the next bead. Confirmed by
+reproduction, arm-then-resume in `-p` mode against a stub goal, on 2.1.270 and
+2.1.272. It needs Claude Code 2.1.272 or newer, though: 2.1.272 fixed `/goal`
+silently stalling after API errors, network drops, or token limits. On an older
+claude the loop can stop evaluating mid-run, and the session then exits at its
+next natural stop with the epic unfinished, reading as a clean finish. The
+driver refuses to start below that version.
+
 The condition to arm:
 
 ```text
@@ -113,7 +123,7 @@ Before spending anything it refuses a bead that does not exist, is closed, has
 no children, or whose children are all settled. It refuses to run from a linked
 worktree, since the skill creates worktrees under the main checkout and must
 not nest them. It checks that `claude`, `bd`, `gh`, `jq`, `git` and `uuidgen`
-are all present.
+are all present, and that `claude` is 2.1.272 or newer.
 
 It logs each run and prints the resume command when a cap stops it. Exit status
 is the status of the working call; nonzero usually means a cap, not a fault. A

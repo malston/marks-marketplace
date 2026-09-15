@@ -55,6 +55,10 @@ export STUB_RECORD="$WORK/record.txt"
 cat >"$STUB_DIR/claude" <<'STUB'
 #!/usr/bin/env bash
 set -u
+if [[ "${1:-}" == --version ]]; then
+    printf '%s (Claude Code)\n' "${STUB_CLAUDE_VERSION:-2.1.272}"
+    exit 0
+fi
 printf '%s\n' "--- stub call ---" >>"$STUB_RECORD"
 for a in "$@"; do printf '%s\n' "  arg: $a" >>"$STUB_RECORD"; done
 if printf '%s\n' "$@" | grep -q -- '--resume'; then
@@ -264,6 +268,17 @@ rm -f "$STUB_RECORD"
 check "unknown bead refused" "1" "$?"
 check "message names it as unknown" "1" "$(grep -c 'no such bead' "$WORK/t9.out")"
 check "no claude call was made" "0" "$([[ -f "$STUB_RECORD" ]] && grep -c -- '--- stub call ---' "$STUB_RECORD" || printf '0')"
+
+printf '\n=== a claude older than the goal-stall fix is refused before any call ===\n'
+rm -f "$STUB_RECORD"
+STUB_CLAUDE_VERSION=2.1.200 "$DRIVER" "$EPIC" --repo "$REPO" --dry-run >"$WORK/t10.out" 2>&1
+check "old claude refused" "1" "$?"
+check "message names the version floor" "1" "$(grep -c 'needs 2.1.272 or newer' "$WORK/t10.out")"
+check "no call was made on an old claude" "0" "$(stub_calls)"
+
+printf '\n=== a new-enough claude clears the version gate ===\n'
+STUB_CLAUDE_VERSION=2.1.272 "$DRIVER" "$EPIC" --repo "$REPO" --dry-run >"$WORK/t11.out" 2>&1
+check "current version accepted" "0" "$?"
 
 printf '\n'
 if [[ "$fail" -eq 0 ]]; then
