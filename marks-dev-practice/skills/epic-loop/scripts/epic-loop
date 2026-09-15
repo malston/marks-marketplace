@@ -48,6 +48,13 @@ readonly DEFAULT_LOG_DIR="${HOME}/.local/state/epic-loop"
 # Denied during the goal-arming call so it cannot start work. See arm_cmd.
 readonly ARM_DENIED_TOOLS="Bash,Edit,Write,NotebookEdit,Task,Agent"
 
+# 2.1.272 fixed /goal silently stalling after API errors, network drops, or
+# token limits. On an older claude the goal loop can stop evaluating mid-run and
+# the session exits at its next natural stop with the epic unfinished, reading
+# as a clean finish. The whole two-call design rests on the goal re-prompting
+# the working call, so a version below this floor is refused up front.
+readonly MIN_CLAUDE_VERSION=2.1.272
+
 # Both calls run from inside the target repo, and a repo that exports an
 # Anthropic key for its own tooling (a direnv .envrc, a sourced .env) hands it
 # to claude too, where it outranks the claude.ai login. The run then bills a
@@ -112,6 +119,19 @@ note() {
 require_cmd() {
     command -v "$1" >/dev/null 2>&1 \
         || die "required command not found: $1"
+}
+
+# Refuse a claude older than the goal-stall fix. See MIN_CLAUDE_VERSION.
+require_claude_version() {
+    local got
+    got="$(claude --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+    [[ -n "$got" ]] || die "could not read a version from 'claude --version'"
+    [[ "$(printf '%s\n%s\n' "$MIN_CLAUDE_VERSION" "$got" | sort -V | head -1)" \
+        == "$MIN_CLAUDE_VERSION" ]] \
+        || die "claude $got is too old; /epic-loop needs $MIN_CLAUDE_VERSION or newer.
+  $MIN_CLAUDE_VERSION fixed /goal silently stalling after API errors, network
+  drops, or token limits, which otherwise ends a run early with the epic
+  unfinished. Upgrade claude, then re-run."
 }
 
 # bd emits a bare object, a single-element array, or -- since bd 1.2, which
@@ -255,6 +275,7 @@ main() {
     require_cmd jq
     require_cmd git
     require_cmd uuidgen
+    require_claude_version
 
     # Resolve the repo before anything else reads git or bd, since bd is
     # workspace-scoped and the beads DB lives in the repo.
