@@ -90,7 +90,7 @@
       "name": "marks-forgd-training",
       "source": "./marks-forgd-training",
       "description": "Forgd session tooling: quick/deep/ELI5 training references, deck coaching, teleprompter script generation, slide-by-slide talk-track review, and the talk-track build chain.",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "author": {
         "name": "Mark Alston"
       }
