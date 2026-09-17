@@ -85,7 +85,7 @@ bd update $EPIC --add-label turns-<N> --remove-label turns-<N-1>
 
 Read it back from `bd show $EPIC --json` as the highest `turns-*` label, tolerating two: a turn that died between the add and the remove leaves both, and the run continues on the higher one rather than stopping.
 
-It is a label because it used to be a line inside the notes field, maintained by reading that field, editing the line and writing the whole thing back. A run did that as a plain `--notes "turns: 5"` and the epic's own notes were gone, with nothing recording what they had said. `--add-label` cannot reach the notes field, so the mistake is no longer available. Never write the counter into notes, and never use `--notes` on the epic at all: the only safe write to that field is `--append-notes`.
+The counter is a label so that keeping it cannot touch the notes field. Notes is a single shared prose field where a user keeps their own remarks, and a read-modify-write on it, performed once per turn by a model, gets performed as a plain overwrite eventually: one run wrote `bd update $EPIC --notes "turns: 5"` outright. `--add-label` cannot reach notes, so that mistake is not available. Never write the counter into notes, and never use `--notes` on the epic at all: the only safe write to that field is `--append-notes`.
 
 If no goal is active, keep going anyway. End each turn by picking up the next bead, and stop only at the stop condition at the bottom of this file.
 
