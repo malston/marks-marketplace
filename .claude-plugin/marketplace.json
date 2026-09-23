@@ -1,6 +1,6 @@
 {
   "name": "marks-marketplace",
-  "description": "Mark Alston's private Claude Code marketplace of thematic skill plugins.",
+  "description": "Mark Alston's Claude Code marketplace of thematic skill plugins.",
   "owner": {
     "name": "Mark Alston"
   },
@@ -28,15 +28,6 @@
       "source": "./marks-git-workflow",
       "description": "Git and review workflow plus the investigation-scratchpad skill and its enforcement hook.",
       "version": "0.2.0",
-      "author": {
-        "name": "Mark Alston"
-      }
-    },
-    {
-      "name": "marks-vault",
-      "source": "./marks-vault",
-      "description": "Obsidian vault operations: date-slug renaming, vlt CLI workflows, memory consolidation.",
-      "version": "0.1.0",
       "author": {
         "name": "Mark Alston"
       }
@@ -78,33 +69,6 @@
       }
     },
     {
-      "name": "marks-book-knowledge",
-      "source": "./marks-book-knowledge",
-      "description": "Knowledge bases distilled from books (Kubernetes internals, Terraform, software security, system design).",
-      "version": "0.1.0",
-      "author": {
-        "name": "Mark Alston"
-      }
-    },
-    {
-      "name": "marks-forgd-training",
-      "source": "./marks-forgd-training",
-      "description": "Forgd session tooling: quick/deep/ELI5 training references, deck coaching, teleprompter script generation, slide-by-slide talk-track review, and the talk-track build chain.",
-      "version": "0.3.1",
-      "author": {
-        "name": "Mark Alston"
-      }
-    },
-    {
-      "name": "marks-cca",
-      "source": "./marks-cca",
-      "description": "CCA-Foundations exam prep: practice-card formatting, a practice-tracking coach, and an interactive quiz drill.",
-      "version": "0.1.0",
-      "author": {
-        "name": "Mark Alston"
-      }
-    },
-    {
       "name": "marks-ai-eng",
       "source": "./marks-ai-eng",
       "description": "AI engineering helpers: Claude API building reference, prompt lookup, and an official-docs consultant.",
@@ -120,15 +84,6 @@
       "version": "0.1.0",
       "author": {
         "name": "Mark Alston"
-      }
-    },
-    {
-      "name": "engineer-grade-agent-skills",
-      "source": "./engineer-grade-agent-skills",
-      "description": "Production-grade engineering skills (90): clean code, TDD, DDD, architecture, messaging, languages, observability, agents. Vendored from roanbrasil/engineer-grade-agent-skills (MIT).",
-      "version": "2.1.0",
-      "author": {
-        "name": "roanbrasil"
       }
     }
   ]
