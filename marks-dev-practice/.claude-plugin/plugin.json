@@ -1,6 +1,6 @@
 {
   "name": "marks-dev-practice",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "Engineering practice: clean architecture, TDD, PR-driven TDD, unattended epic loops, subagent context scoping, code explanation.",
   "author": {
     "name": "Mark Alston"
