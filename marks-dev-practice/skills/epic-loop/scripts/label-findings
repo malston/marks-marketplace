@@ -22,15 +22,13 @@
 # Prints one line per finding and a count per label. Every answer, with the
 # full probability spread, goes to a JSON Lines file whose path is printed at
 # the end. Exits 0 when every call succeeded, 1 when any failed, 2 on bad
-# usage or a missing key or tool.
+# usage, a missing or rejected key, or a missing tool.
 
 # No -e: one failed Jev call must not end the run. pipefail still matters, so
 # a bd failure is not hidden behind the jq that reads its output.
 set -uo pipefail
 
 PROG="$(basename "$0")"
-# shellcheck source=bd-json.sh
-source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/bd-json.sh"
 API_URL="https://api.typesafe.ai/v1/systemone"
 MODEL="jev-latest"
 
@@ -53,10 +51,19 @@ EOF
 
 die() { printf '%s: %s\n' "$PROG" "$1" >&2; exit 2; }
 
+# Adds an epic id once, so naming an epic twice does not pay for it twice.
+add_epic() {
+    local e
+    for e in ${EPICS[@]+"${EPICS[@]}"}; do
+        [[ "$e" == "$1" ]] && return
+    done
+    EPICS+=("$1")
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --repo)    REPO="${2:?--repo needs a directory}"; shift 2 ;;
-        --epic)    EPICS+=("${2:?--epic needs a bead id}"); shift 2 ;;
+        --epic)    add_epic "${2:?--epic needs a bead id}"; shift 2 ;;
         --out)     OUT="${2:?--out needs a file}"; shift 2 ;;
         --dry-run) DRY_RUN=true; shift ;;
         -h|--help) usage; exit 0 ;;
@@ -87,6 +94,14 @@ fi
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+
+# bd 1.2+ can wrap list output in {"data": [...], "schema_version": N}. An
+# error reply has schema_version but no data, so require both; keying on
+# schema_version alone would turn the error into a null.
+bd_json_array() {
+    jq 'if type == "object" and has("schema_version") and has("data")
+        then .data else . end'
+}
 
 # -n 0 lifts bd's default cap of 50 rows. Without it, findings epics beyond the
 # first 50 epics, or findings beyond the first 50 in an epic, drop out silently.
@@ -162,17 +177,23 @@ while IFS= read -r finding <&3; do
                 --data-binary "@$WORK/request.json" "$API_URL" 2>"$WORK/curl.err")" \
         && answer="$(jq -ce '.answers.verdict | select(.choice)' <<<"$reply" 2>/dev/null)"; then
         label="$(jq -r .choice <<<"$answer")"
-        conf="$(jq -r '.confidence // empty | . * 100 | round / 100' <<<"$answer")"
+        conf="$(jq -r '.confidence // empty' <<<"$answer")"
+        if [[ -n "$conf" ]]; then conf="$(printf '%.2f' "$conf")"; else conf="-"; fi
         jq -c --argjson a "$answer" --arg model "$(jq -r '.model // ""' <<<"$reply")" \
             '. + {label: $a.choice, confidence: $a.confidence, probabilities: $a.probabilities, model: $model}' \
             <<<"$finding" >>"$OUT"
-        printf '%-16s %-15s %5.2f  %-8s %s\n' "$id" "$label" "${conf:-0}" "$status" "$reason"
+        printf '%-16s %-15s %5s  %-8s %s\n' "$id" "$label" "$conf" "$status" "$reason"
     else
         errors=$((errors + 1))
         err="$(tr '\n' ' ' <"$WORK/curl.err" | cut -c1-120)"
         [[ -z "$err" ]] && err="reply had no verdict"
         jq -c --arg err "$err" '. + {label: "error", error: $err}' <<<"$finding" >>"$OUT"
         printf '%-16s %-15s %5s  %-8s %s\n' "$id" "error" "-" "$status" "$err"
+        # A 401 means the key itself is bad, so every later call would fail the
+        # same way. A 403 can be specific to one finding, so it does not stop.
+        if grep -q 'returned error: 401' "$WORK/curl.err"; then
+            die "TypeSafe rejected TYPESAFE_API_KEY (HTTP 401); stopped after one call. Partial results: $OUT"
+        fi
     fi
 done 3<"$WORK/findings.jsonl"
 

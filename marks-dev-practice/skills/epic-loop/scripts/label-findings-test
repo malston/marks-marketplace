@@ -100,7 +100,7 @@ done
 [[ -n "$body" ]] && { printf -- '--- body ---\n' >>"$STUB_RECORD"; jq -c . "$body" >>"$STUB_RECORD"; }
 if [[ -n "${STUB_CURL_REPLY:-}" ]]; then printf '%s\n' "$STUB_CURL_REPLY"; exit 0; fi
 if [[ "${STUB_CURL_EXIT:-0}" != 0 ]]; then
-    printf 'curl: (22) The requested URL returned error: 500\n' >&2
+    printf 'curl: (22) The requested URL returned error: %s\n' "${STUB_CURL_STATUS:-500}" >&2
     exit "$STUB_CURL_EXIT"
 fi
 choice="${STUB_CHOICE:-false_positive}"
@@ -220,6 +220,35 @@ check "exit code" "0" "$?"
 check "file is in the caller's directory" "3" "$(wc -l <"$WORK/caller/rel.jsonl" 2>/dev/null | tr -d ' ')"
 check "nothing written into the repo" "0" "$(find "$REPO" -name rel.jsonl | wc -l | tr -d ' ')"
 check "printed path is absolute" "1" "$(grep -c "^full results: $WORK/caller/rel.jsonl$" "$WORK/t10.out")"
+
+printf '\n=== a rejected key stops the run at the first call ===\n'
+reset
+STUB_CURL_EXIT=22 STUB_CURL_STATUS=401 TYPESAFE_API_KEY="$KEY" "$SCRIPT" --repo "$REPO" --out "$WORK/t11.jsonl" >"$WORK/t11.out" 2>&1
+check "exit code" "2" "$?"
+check "only one call made" "1" "$(curl_calls)"
+check "message names the key" "1" "$(grep -c 'rejected TYPESAFE_API_KEY' "$WORK/t11.out")"
+check "key absent from output" "0" "$(grep -c "$KEY" "$WORK/t11.out")"
+
+printf '\n=== a 403 on one finding does not stop the run ===\n'
+reset
+STUB_CURL_EXIT=22 STUB_CURL_STATUS=403 TYPESAFE_API_KEY="$KEY" "$SCRIPT" --repo "$REPO" --out "$WORK/t12.jsonl" >"$WORK/t12.out" 2>&1
+check "exit code" "1" "$?"
+check "every finding still attempted" "3" "$(curl_calls)"
+
+printf '\n=== naming an epic twice labels it once ===\n'
+reset
+TYPESAFE_API_KEY="$KEY" "$SCRIPT" --repo "$REPO" --epic demo-f2 --epic demo-f2 --out "$WORK/t13.jsonl" >"$WORK/t13.out" 2>&1
+check "exit code" "0" "$?"
+check "one call, not two" "1" "$(curl_calls)"
+check "counts the epic once" "1" "$(grep -c '^1 findings in 1 epics' "$WORK/t13.out")"
+
+printf '\n=== a verdict without a confidence prints a dash ===\n'
+reset
+STUB_CURL_REPLY='{"model":"jev-1.13.0","answers":{"verdict":{"type":"choice","choice":"low_value"}}}' \
+    TYPESAFE_API_KEY="$KEY" "$SCRIPT" --repo "$REPO" --epic demo-f2 --out "$WORK/t14.jsonl" >"$WORK/t14.out" 2>&1
+check "exit code" "0" "$?"
+check "dash in the confidence column" "1" "$(grep -c -E '^demo-f2\.1 +low_value +- +closed ' "$WORK/t14.out")"
+check "results record keeps confidence null" "null" "$(jq -r .confidence "$WORK/t14.jsonl")"
 
 printf '\n'
 if [[ "$fail" -eq 0 ]]; then
