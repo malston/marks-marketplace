@@ -1,0 +1,230 @@
+#!/usr/bin/env bash
+#
+# label-findings-test -- prove label-findings reads findings beads, asks Jev
+# the right question, and reports each answer against the bead's outcome.
+#
+# Run it after editing label-findings. It substitutes stubs for bd and curl,
+# so no API call is made, no key is needed, and no tracker is touched.
+#
+#   label-findings-test
+#   label-findings-test --script PATH   # test a copy somewhere else
+#
+# Exit status is 0 when every assertion passes.
+
+set -u
+
+PROG="$(basename "$0")"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT="$HERE/label-findings"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --script) SCRIPT="${2:?--script needs a path}"; shift 2 ;;
+        -h|--help) printf 'Usage: %s [--script PATH]\n' "$PROG"; exit 0 ;;
+        *) printf '%s: unknown option: %s\n' "$PROG" "$1" >&2; exit 2 ;;
+    esac
+done
+
+[[ -x "$SCRIPT" ]] \
+    || { printf '%s: cannot find an executable label-findings at %s\n' "$PROG" "$SCRIPT" >&2; exit 2; }
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+STUB_DIR="$WORK/stub"
+REPO="$WORK/repo"
+mkdir -p "$STUB_DIR" "$REPO"
+export STUB_RECORD="$WORK/record.txt"
+export STUB_STDIN="$WORK/stdin.txt"
+
+# Two findings epics and one ordinary epic. Only the findings epics count.
+cat >"$WORK/epics.json" <<'JSON'
+[
+  {"id": "demo-f1", "title": "demo-a1 review findings"},
+  {"id": "demo-f2", "title": "demo-b2 review findings"},
+  {"id": "demo-x9", "title": "Ship the thing"},
+  {"id": "demo-n0", "title": null}
+]
+JSON
+cat >"$WORK/children-demo-f1.json" <<'JSON'
+[
+  {"id": "demo-f1.1", "title": "Guard divides by zero", "description": "PR 7 review. total can be 0.", "status": "closed", "close_reason": "PR #9: added the guard SECRET-OUTCOME-TEXT", "priority": 3},
+  {"id": "demo-f1.2", "title": "Rename helper", "description": "PR 7 review. Style nit.", "status": "open", "close_reason": "", "priority": 4}
+]
+JSON
+cat >"$WORK/children-demo-f2.json" <<'JSON'
+[
+  {"id": "demo-f2.1", "title": "Comment is stale", "description": "PR 8 review.", "status": "closed", "close_reason": "Moot: code replaced", "priority": 4}
+]
+JSON
+cat >"$WORK/children-demo-x9.json" <<'JSON'
+[
+  {"id": "demo-x9.1", "title": "Not a finding", "description": "Ordinary work.", "status": "open", "close_reason": "", "priority": 2}
+]
+JSON
+
+# bd stub: answers the two list queries label-findings makes, from the files
+# above, and records every call.
+cat >"$STUB_DIR/bd" <<STUB
+#!/usr/bin/env bash
+printf 'bd %s\n' "\$*" >>"\$STUB_RECORD"
+[[ "\${STUB_BD_EXIT:-0}" != 0 ]] && { printf 'bd stub: failing on purpose\n' >&2; exit "\$STUB_BD_EXIT"; }
+# bd 1.2+ can wrap list output in {"data": [...], "schema_version": N}.
+emit() {
+    if [[ -n "\${STUB_BD_ENVELOPE:-}" ]]; then jq '{data: ., schema_version: 1}' "\$1"; else cat "\$1"; fi
+}
+args=" \$* "
+if [[ "\$args" == *" --type=epic "* ]]; then emit "$WORK/epics.json"; exit 0; fi
+for ((i=1; i<=\$#; i++)); do
+    if [[ "\${!i}" == --parent ]]; then
+        j=\$((i+1)); f="$WORK/children-\${!j}.json"
+        if [[ -f "\$f" ]]; then emit "\$f"; else printf '[]\n'; fi
+        exit 0
+    fi
+done
+printf 'bd stub: unexpected call: %s\n' "\$*" >&2
+exit 3
+STUB
+
+# curl stub: records its arguments and whatever arrives on stdin, then answers
+# with a canned Choice reply, or fails the way curl --fail does.
+cat >"$STUB_DIR/curl" <<'STUB'
+#!/usr/bin/env bash
+printf 'curl' >>"$STUB_RECORD"
+for a in "$@"; do printf ' %q' "$a" >>"$STUB_RECORD"; done
+printf '\n' >>"$STUB_RECORD"
+cat >>"$STUB_STDIN"
+body=""
+for ((i=1; i<=$#; i++)); do
+    if [[ "${!i}" == --data-binary ]]; then j=$((i+1)); body="${!j#@}"; fi
+done
+[[ -n "$body" ]] && { printf -- '--- body ---\n' >>"$STUB_RECORD"; jq -c . "$body" >>"$STUB_RECORD"; }
+if [[ -n "${STUB_CURL_REPLY:-}" ]]; then printf '%s\n' "$STUB_CURL_REPLY"; exit 0; fi
+if [[ "${STUB_CURL_EXIT:-0}" != 0 ]]; then
+    printf 'curl: (22) The requested URL returned error: 500\n' >&2
+    exit "$STUB_CURL_EXIT"
+fi
+choice="${STUB_CHOICE:-false_positive}"
+if [[ -n "${STUB_CHOICES:-}" ]]; then
+    n=$(grep -c '^curl' "$STUB_RECORD"); IFS=, read -r -a all <<<"$STUB_CHOICES"
+    choice="${all[$(( (n - 1) % ${#all[@]} ))]}"
+fi
+printf '{"model":"jev-1.13.0","usage":{"input_tokens":10,"output_tokens":1},"answers":{"verdict":{"type":"choice","choice":"%s","confidence":0.8,"probabilities":{"real_defect":0.1,"low_value":0.1,"false_positive":0.8}}}}\n' "$choice"
+STUB
+chmod +x "$STUB_DIR/bd" "$STUB_DIR/curl"
+export PATH="$STUB_DIR:$PATH"
+
+[[ "$(command -v curl)" == "$STUB_DIR/curl" && "$(command -v bd)" == "$STUB_DIR/bd" ]] \
+    || { printf '%s: the stubs are not first on PATH; refusing to run against the real API\n' "$PROG" >&2; exit 2; }
+
+KEY='tsk-test-key-must-not-leak'
+
+fail=0
+check() {
+    local label="$1" expected="$2" actual="$3"
+    if [[ "$expected" == "$actual" ]]; then
+        printf 'PASS  %s\n' "$label"
+    else
+        printf 'FAIL  %s (expected %q, got %q)\n' "$label" "$expected" "$actual"
+        fail=1
+    fi
+}
+reset() { rm -f "$STUB_RECORD" "$STUB_STDIN"; touch "$STUB_RECORD" "$STUB_STDIN"; }
+curl_calls() { grep -c '^curl' "$STUB_RECORD"; }
+
+printf '\n=== a missing key is refused before any call ===\n'
+reset
+env -u TYPESAFE_API_KEY "$SCRIPT" --repo "$REPO" --out "$WORK/t1.jsonl" >"$WORK/t1.out" 2>&1
+check "exit code" "2" "$?"
+check "message names the variable" "1" "$(grep -c 'TYPESAFE_API_KEY' "$WORK/t1.out")"
+check "no API call" "0" "$(curl_calls)"
+
+printf '\n=== a dry run needs no key and makes no call ===\n'
+reset
+env -u TYPESAFE_API_KEY "$SCRIPT" --repo "$REPO" --dry-run >"$WORK/t2.out" 2>&1
+check "exit code" "0" "$?"
+check "counts only findings-epic children" "1" "$(grep -c '^3 findings in 2 epics' "$WORK/t2.out")"
+check "shows a choice question" "1" "$(grep -c '"type": "choice"' "$WORK/t2.out")"
+check "offers three labels" "3" "$(grep -c -E '"(real_defect|low_value|false_positive)":' "$WORK/t2.out")"
+check "state carries the finding text" "1" "$(grep -c 'total can be 0' "$WORK/t2.out")"
+check "state never carries the outcome" "0" "$(grep -c 'SECRET-OUTCOME-TEXT' "$WORK/t2.out")"
+check "no API call" "0" "$(curl_calls)"
+
+printf '\n=== a normal run labels every finding against its outcome ===\n'
+reset
+TYPESAFE_API_KEY="$KEY" "$SCRIPT" --repo "$REPO" --out "$WORK/t3.jsonl" >"$WORK/t3.out" 2>&1
+check "exit code" "0" "$?"
+check "one call per finding" "3" "$(curl_calls)"
+check "line shows id, label, confidence, status" "1" \
+    "$(grep -c -E '^demo-f1\.1 +false_positive +0\.80 +closed ' "$WORK/t3.out")"
+check "line shows the close reason" "1" "$(grep 'demo-f2.1' "$WORK/t3.out" | grep -c 'Moot: code replaced')"
+check "summary counts the label" "1" "$(grep -c -E '^ *false_positive: 3$' "$WORK/t3.out")"
+check "results file has one record per finding" "3" "$(wc -l <"$WORK/t3.jsonl" | tr -d ' ')"
+check "results record keeps the probabilities" "3" "$(jq -s '[.[] | select(.probabilities.false_positive == 0.8)] | length' "$WORK/t3.jsonl")"
+check "request state never carries the outcome" "0" "$(grep -c 'SECRET-OUTCOME-TEXT' "$STUB_RECORD")"
+check "state holds only title and description" "3" \
+    "$(awk '/^--- body ---$/{getline; print}' "$STUB_RECORD" | jq -c '.state.finding | keys' | grep -c '^\["description","title"\]$')"
+check "bd asked for every row, not the first 50" "3" "$(grep '^bd list' "$STUB_RECORD" | grep -c -- ' -n 0')"
+check "key sent on stdin, not as an argument" "0" "$(grep '^curl' "$STUB_RECORD" | grep -c "$KEY")"
+check "key reached curl on stdin" "3" "$(grep -c "Authorization: Bearer $KEY" "$STUB_STDIN")"
+check "key absent from output" "0" "$(grep -c "$KEY" "$WORK/t3.out")"
+check "key absent from results" "0" "$(grep -c "$KEY" "$WORK/t3.jsonl")"
+
+printf '\n=== an API failure is recorded per finding and fails the run ===\n'
+reset
+STUB_CURL_EXIT=22 TYPESAFE_API_KEY="$KEY" "$SCRIPT" --repo "$REPO" --out "$WORK/t4.jsonl" >"$WORK/t4.out" 2>&1
+check "exit code" "1" "$?"
+check "every finding still attempted" "3" "$(curl_calls)"
+check "failed finding marked error" "1" "$(grep -c -E '^demo-f1\.1 +error ' "$WORK/t4.out")"
+check "summary counts errors" "1" "$(grep -c -E '^ *errors: 3$' "$WORK/t4.out")"
+check "results file records each error" "3" "$(jq -s '[.[] | select(.label == "error" and (.error | length) > 0)] | length' "$WORK/t4.jsonl")"
+
+printf '\n=== --epic limits the run to the named epic ===\n'
+reset
+TYPESAFE_API_KEY="$KEY" "$SCRIPT" --repo "$REPO" --epic demo-f2 --out "$WORK/t5.jsonl" >"$WORK/t5.out" 2>&1
+check "exit code" "0" "$?"
+check "only that epic's findings" "1" "$(curl_calls)"
+check "and it is the right one" "1" "$(grep -c '^demo-f2\.1 ' "$WORK/t5.out")"
+
+printf '\n=== a reply without a verdict counts as an error ===\n'
+reset
+STUB_CURL_REPLY='<html>bad gateway</html>' TYPESAFE_API_KEY="$KEY" "$SCRIPT" --repo "$REPO" --out "$WORK/t6.jsonl" >"$WORK/t6.out" 2>&1
+check "exit code" "1" "$?"
+check "finding marked error" "1" "$(grep -c -E '^demo-f1\.1 +error .*reply had no verdict' "$WORK/t6.out")"
+
+printf '\n=== the summary counts each label separately ===\n'
+reset
+STUB_CHOICES=real_defect,false_positive,real_defect TYPESAFE_API_KEY="$KEY" "$SCRIPT" --repo "$REPO" --out "$WORK/t7.jsonl" >"$WORK/t7.out" 2>&1
+check "exit code" "0" "$?"
+check "real_defect counted" "1" "$(grep -c -E '^ *real_defect: 2$' "$WORK/t7.out")"
+check "false_positive counted" "1" "$(grep -c -E '^ *false_positive: 1$' "$WORK/t7.out")"
+
+printf '\n=== the bd 1.2+ envelope is unwrapped ===\n'
+reset
+STUB_BD_ENVELOPE=1 env -u TYPESAFE_API_KEY "$SCRIPT" --repo "$REPO" --dry-run >"$WORK/t8.out" 2>&1
+check "exit code" "0" "$?"
+check "same findings as a bare array" "1" "$(grep -c '^3 findings in 2 epics' "$WORK/t8.out")"
+STUB_BD_ENVELOPE=1 env -u TYPESAFE_API_KEY "$SCRIPT" --repo "$REPO" --epic demo-f1 --dry-run >"$WORK/t8b.out" 2>&1
+check "children unwrapped too" "1" "$(grep -c '^2 findings in 1 epics' "$WORK/t8b.out")"
+
+printf '\n=== a bd failure stops the run ===\n'
+reset
+STUB_BD_EXIT=1 env -u TYPESAFE_API_KEY "$SCRIPT" --repo "$REPO" --dry-run >"$WORK/t9.out" 2>&1
+check "exit code" "2" "$?"
+check "message names bd" "1" "$(grep -c 'bd could not list' "$WORK/t9.out")"
+
+printf '\n=== a relative --out lands where the caller stands ===\n'
+reset
+mkdir -p "$WORK/caller"
+( cd "$WORK/caller" && TYPESAFE_API_KEY="$KEY" "$SCRIPT" --repo "$REPO" --out rel.jsonl >"$WORK/t10.out" 2>&1 )
+check "exit code" "0" "$?"
+check "file is in the caller's directory" "3" "$(wc -l <"$WORK/caller/rel.jsonl" 2>/dev/null | tr -d ' ')"
+check "nothing written into the repo" "0" "$(find "$REPO" -name rel.jsonl | wc -l | tr -d ' ')"
+check "printed path is absolute" "1" "$(grep -c "^full results: $WORK/caller/rel.jsonl$" "$WORK/t10.out")"
+
+printf '\n'
+if [[ "$fail" -eq 0 ]]; then
+    printf 'ALL TESTS PASSED\n'
+else
+    printf 'SOME TESTS FAILED\n'
+fi
+exit "$fail"

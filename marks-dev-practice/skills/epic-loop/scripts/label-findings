@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+#
+# label-findings -- ask Jev to label each review finding that epic-loop filed,
+# and show each label next to what actually happened to the finding.
+#
+# Use it to measure whether Jev can tell a real defect from a false positive
+# before any of that judgment goes into the loop itself. It only reads beads;
+# it never changes one. Each finding costs one Jev call.
+#
+# It reads every child of every epic whose title ends in "review findings",
+# the sibling epics epic-loop files findings under, or only the epics you name.
+# Jev sees the finding's title and description. It never sees the status or
+# the close reason, since those are the outcome being compared against.
+#
+#   label-findings --repo ~/code/coderay --dry-run   # count, show one request
+#   label-findings --repo ~/code/coderay             # label everything
+#   label-findings --epic coderay-ziw                # one findings epic
+#
+# The key comes from TYPESAFE_API_KEY and is passed to curl on stdin, so it
+# never appears in a process listing, the output, or the results file.
+#
+# Prints one line per finding and a count per label. Every answer, with the
+# full probability spread, goes to a JSON Lines file whose path is printed at
+# the end. Exits 0 when every call succeeded, 1 when any failed, 2 on bad
+# usage or a missing key or tool.
+
+# No -e: one failed Jev call must not end the run. pipefail still matters, so
+# a bd failure is not hidden behind the jq that reads its output.
+set -uo pipefail
+
+PROG="$(basename "$0")"
+# shellcheck source=bd-json.sh
+source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/bd-json.sh"
+API_URL="https://api.typesafe.ai/v1/systemone"
+MODEL="jev-latest"
+
+REPO=""
+OUT=""
+DRY_RUN=false
+EPICS=()
+
+usage() {
+    cat <<EOF
+Usage: $PROG [--repo DIR] [--epic ID]... [--out FILE] [--dry-run]
+
+  --repo DIR   beads workspace to read (default: git root of the current dir)
+  --epic ID    label only this findings epic; repeat for more
+  --out FILE   where the JSON Lines results go
+               (default: \${XDG_STATE_HOME:-~/.local/state}/epic-loop/label-findings-<time>.jsonl)
+  --dry-run    count the findings and print the first request; no key, no call
+EOF
+}
+
+die() { printf '%s: %s\n' "$PROG" "$1" >&2; exit 2; }
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --repo)    REPO="${2:?--repo needs a directory}"; shift 2 ;;
+        --epic)    EPICS+=("${2:?--epic needs a bead id}"); shift 2 ;;
+        --out)     OUT="${2:?--out needs a file}"; shift 2 ;;
+        --dry-run) DRY_RUN=true; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) printf '%s: unknown option: %s\n' "$PROG" "$1" >&2; usage >&2; exit 2 ;;
+    esac
+done
+
+for tool in bd jq curl; do
+    command -v "$tool" >/dev/null 2>&1 || die "needs $tool on PATH"
+done
+
+if [[ -z "$REPO" ]]; then
+    REPO="$(git rev-parse --show-toplevel 2>/dev/null)" \
+        || die "not inside a git repository; pass --repo DIR"
+fi
+[[ -d "$REPO" ]] || die "no such repo: $REPO"
+
+# A relative --out means relative to where the caller stands, so pin it down
+# before moving into the repo.
+if [[ -n "$OUT" && "$OUT" != /* ]]; then
+    OUT="$PWD/$OUT"
+fi
+cd "$REPO" || die "cannot enter $REPO"
+
+if [[ "$DRY_RUN" == false && -z "${TYPESAFE_API_KEY:-}" ]]; then
+    die "set TYPESAFE_API_KEY to your TypeSafe API key (console.typesafe.ai/keys), or use --dry-run"
+fi
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+# -n 0 lifts bd's default cap of 50 rows. Without it, findings epics beyond the
+# first 50 epics, or findings beyond the first 50 in an epic, drop out silently.
+if [[ ${#EPICS[@]} -eq 0 ]]; then
+    epics_json="$(bd list --type=epic --status all -n 0 --json | bd_json_array)" \
+        || die "bd could not list epics in $REPO"
+    ids="$(jq -r '.[] | select((.title // "") | test("review findings$")) | .id' <<<"$epics_json")" \
+        || die "could not read the epic list bd returned"
+    while IFS= read -r id; do
+        [[ -n "$id" ]] && EPICS+=("$id")
+    done <<<"$ids"
+fi
+
+# One JSON object per finding, tagged with the epic it came from.
+: >"$WORK/findings.jsonl"
+for epic in ${EPICS[@]+"${EPICS[@]}"}; do
+    children="$(bd list --parent "$epic" --status all -n 0 --json | bd_json_array)" \
+        || die "bd could not list the children of $epic"
+    rows="$(jq -c --arg epic "$epic" '.[] | {
+        id, epic: $epic, title,
+        description: (.description // ""),
+        status, close_reason: (.close_reason // "")
+    }' <<<"$children")" || die "could not read the children bd returned for $epic"
+    [[ -n "$rows" ]] && printf '%s\n' "$rows" >>"$WORK/findings.jsonl"
+done
+
+count="$(wc -l <"$WORK/findings.jsonl" | tr -d ' ')"
+printf '%s findings in %s epics, one Jev call each\n' "$count" "${#EPICS[@]}"
+[[ "$count" -eq 0 ]] && exit 0
+
+# The question. Only the finding's own text goes into state.
+build_request() {
+    jq --arg model "$MODEL" '{
+        model: $model,
+        state: { finding: { title, description } },
+        questions: { verdict: {
+            type: "choice",
+            instructions: "A code reviewer raised this finding on a pull request. Judge the finding from its text: is it a real problem worth fixing?",
+            criteria: {
+                real_defect: "The finding describes a real bug, security flaw, or incorrect behavior that should be fixed.",
+                low_value: "The finding is accurate but minor: style, naming, simplification, or documentation, with no effect on behavior.",
+                false_positive: "The finding is mistaken: the problem it describes does not exist, or the code already handles it."
+            }
+        } }
+    }' <<<"$1"
+}
+
+if [[ "$DRY_RUN" == true ]]; then
+    printf '\nfirst request:\n'
+    build_request "$(head -n 1 "$WORK/findings.jsonl")"
+    printf '\nnothing sent.\n'
+    exit 0
+fi
+
+if [[ -z "$OUT" ]]; then
+    OUT="${XDG_STATE_HOME:-$HOME/.local/state}/epic-loop/label-findings-$(date -u +%Y%m%dT%H%M%SZ).jsonl"
+fi
+mkdir -p "$(dirname "$OUT")" || die "cannot create $(dirname "$OUT")"
+: >"$OUT" || die "cannot write $OUT"
+
+errors=0
+printf '\n'
+# The list comes in on fd 3 so nothing in the loop that reads stdin can eat it.
+while IFS= read -r finding <&3; do
+    id="$(jq -r .id <<<"$finding")"
+    status="$(jq -r .status <<<"$finding")"
+    reason="$(jq -r '.close_reason | gsub("\\s+"; " ") | .[0:70]' <<<"$finding")"
+    build_request "$finding" >"$WORK/request.json"
+
+    if reply="$(printf 'Authorization: Bearer %s\n' "$TYPESAFE_API_KEY" \
+            | curl -sS --fail --max-time 60 -H @- \
+                -H 'Content-Type: application/json' \
+                --data-binary "@$WORK/request.json" "$API_URL" 2>"$WORK/curl.err")" \
+        && answer="$(jq -ce '.answers.verdict | select(.choice)' <<<"$reply" 2>/dev/null)"; then
+        label="$(jq -r .choice <<<"$answer")"
+        conf="$(jq -r '.confidence // empty | . * 100 | round / 100' <<<"$answer")"
+        jq -c --argjson a "$answer" --arg model "$(jq -r '.model // ""' <<<"$reply")" \
+            '. + {label: $a.choice, confidence: $a.confidence, probabilities: $a.probabilities, model: $model}' \
+            <<<"$finding" >>"$OUT"
+        printf '%-16s %-15s %5.2f  %-8s %s\n' "$id" "$label" "${conf:-0}" "$status" "$reason"
+    else
+        errors=$((errors + 1))
+        err="$(tr '\n' ' ' <"$WORK/curl.err" | cut -c1-120)"
+        [[ -z "$err" ]] && err="reply had no verdict"
+        jq -c --arg err "$err" '. + {label: "error", error: $err}' <<<"$finding" >>"$OUT"
+        printf '%-16s %-15s %5s  %-8s %s\n' "$id" "error" "-" "$status" "$err"
+    fi
+done 3<"$WORK/findings.jsonl"
+
+printf '\nlabels:\n'
+jq -r 'select(.label != "error") | .label' "$OUT" | sort | uniq -c \
+    | awk '{ printf "  %s: %s\n", $2, $1 }'
+[[ "$errors" -gt 0 ]] && printf '  errors: %s\n' "$errors"
+printf '\nfull results: %s\n' "$OUT"
+
+[[ "$errors" -eq 0 ]]
