@@ -46,11 +46,14 @@ env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN \
     --output-format json >"$OUT/result.json" 2>"$OUT/stderr.txt" || true
 
 # The launcher detaches the driver, so it can still be making its stub calls
-# after the arm exits. Wait for it before reading what it left behind.
+# after the arm exits. Wait for it before reading what it left behind. The
+# pattern matches however the driver was named and wherever the bead id sits.
 for _ in $(seq 60); do
-    pgrep -f "scripts/epic-loop $EPIC" >/dev/null || break
+    pgrep -f "epic-loop.* $EPIC( |\$)" >/dev/null || break
     sleep 1
 done
+pgrep -f "epic-loop.* $EPIC( |\$)" >/dev/null \
+    && echo "WARN: the detached driver was still running after 60s; grading what it has left so far" >&2
 
 # State the grader reads, captured while the sandbox is still intact.
 {
