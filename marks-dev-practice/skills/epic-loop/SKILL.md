@@ -44,24 +44,34 @@ The whole job is to check the epic, launch the driver in the background, and rep
 
    If the user passed `--dry-run` themselves, this step is the whole job. Show them the plan, say nothing was spent, and stop.
 
-3. **Launch it.** Start the driver **in the background** with the user's flags. Background matters: the run outlives your turn, and a foreground call would tie up the session for hours and die with it.
+3. **Launch it, detached.** Start the driver under `nohup` with the user's flags, in one ordinary Bash call that returns within seconds. Detached matters: the run outlives your turn and this session. A background job of this session would die with it, and a `claude -p` session exits, killing its background jobs, as soon as its turn ends.
 
    ```bash
-   "$DRIVER" <bead> [their other flags]
+   OUT="$(mktemp "${TMPDIR:-/tmp}/epic-loop-launch.XXXXXX")"
+   nohup "$DRIVER" <bead> [their other flags] </dev/null >"$OUT" 2>&1 &
+   PID=$!
+   for _ in $(seq 30); do
+       grep -q '^resume:' "$OUT" && break
+       kill -0 "$PID" 2>/dev/null || break
+       sleep 1
+   done
+   cat "$OUT"
    ```
 
-4. **Report and stop.** The driver prints the repo, bead, mode, session, budget and log path before its first `claude` call, so give it a couple of seconds and read the background job's output back. If those lines are an error instead, the run did not start: pass the error on and stop. Otherwise say plainly which mode it is in, because merge mode merges PRs into `main` without asking again:
+   The loop waits for the driver's banner, which it prints before its first `claude` call, or for the driver to exit early.
+
+4. **Report and stop.** Read the banner from that output. If it is an error instead, the run did not start: pass the error on and stop. Otherwise say plainly which mode it is in, because merge mode merges PRs into `main` without asking again:
 
    ```text
    coderay-q2r -- epic, 7 children needing work
    repo:    ~/code/coderay
    mode:    merge (each PR lands on main once its review passes)
-   budget:  $200, stops at 20 epic turns
+   budget:  $200, plus $10 per review; stops at 20 epic turns
    log:     ~/.local/state/epic-loop/20260912T220114Z-coderay-q2r.log
    resume:  claude --resume 3f2a...
    ```
 
-   Then stop. Do not work beads yourself, and do not poll the log. The run is a separate session; you will be told when it exits.
+   Then stop. Do not work beads yourself, and do not poll the log. The run is detached, so this session is not told when it exits: say that the log's last line reads `finished:` with the exit status once the run is over, and that closing this session does not stop it.
 
 If the driver is missing, unrunnable, or you cannot establish which repository is meant, say so and stop. Never fall back to working the beads in this session: this session has no `/goal` driving it, no turn budget, and it will stop after the first bead with the epic half finished.
 

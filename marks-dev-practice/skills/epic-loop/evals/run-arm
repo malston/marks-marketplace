@@ -45,6 +45,13 @@ env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN \
     --max-budget-usd "${BUDGET:-5}" \
     --output-format json >"$OUT/result.json" 2>"$OUT/stderr.txt" || true
 
+# The launcher detaches the driver, so it can still be making its stub calls
+# after the arm exits. Wait for it before reading what it left behind.
+for _ in $(seq 60); do
+    pgrep -f "scripts/epic-loop $EPIC" >/dev/null || break
+    sleep 1
+done
+
 # State the grader reads, captured while the sandbox is still intact.
 {
   echo "=== git worktree list ==="; git -C "$REPO" worktree list
