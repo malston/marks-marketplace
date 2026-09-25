@@ -37,7 +37,8 @@ readonly PROG
 readonly DEFAULT_MAX_TURNS=400
 
 # Passed into the goal text as the parent's own turn counter, which the skill
-# stores in the parent's bd notes so a resumed session does not reset it. This
+# stores as a turns-<N> label on the parent so a resumed session does not
+# reset it. This
 # is a different number from --max-turns above.
 readonly DEFAULT_TURN_BUDGET=20
 
