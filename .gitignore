@@ -1,4 +1,3 @@
-SCRATCHPAD.md*
 .DS_Store
 __pycache__/
 
@@ -8,3 +7,6 @@ __pycache__/
 .beads-credential-key
 .beads/proxieddb/
 beads-pm-workspace/
+
+SCRATCHPAD.md*
+.scratchpad/
