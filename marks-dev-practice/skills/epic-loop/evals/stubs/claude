@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -u
 : "${STUB_RECORD:=/tmp/epic-loop-stub-record.txt}"
+# The driver's version gate reads this before any call; answer with the floor
+# it requires so the gate passes. Set STUB_CLAUDE_VERSION if that floor moves.
+if [[ "${1:-}" == --version ]]; then
+    printf '%s (Claude Code)\n' "${STUB_CLAUDE_VERSION:-2.1.272}"
+    exit 0
+fi
 {
   printf -- '--- stub call ---\n'
   for a in "$@"; do printf '  arg: %s\n' "$a"; done
@@ -10,5 +16,7 @@ if printf '%s\n' "$@" | grep -q -- '--resume'; then
     sleep 1
     exit 0
 fi
-printf 'STUB: arming call ran\n'
-exit 0
+# The driver reads the arming call's JSON result and goes on only when it shows
+# the one-turn cap a healthy arming call ends on.
+printf '%s\n' '{"type":"result","subtype":"error_max_turns","is_error":true,"errors":["Reached maximum number of turns (1)"]}'
+exit 1

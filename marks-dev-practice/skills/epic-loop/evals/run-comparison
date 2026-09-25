@@ -83,8 +83,16 @@ if [[ "$smoke" == true ]]; then
         || die "the claude stub is not first on PATH"
     "$SKILL/scripts/epic-loop" "$(cat "$EV/${arms[0]}/sandbox/fixture-epic.txt")" \
         --repo "$R" --dry-run >/dev/null || die "the driver refused the fixture epic"
+    # A real run through the stubs: the driver parses the arming call's JSON
+    # reply before it starts the working call, so a stub that answers wrongly
+    # stops every arm there.
+    "$SKILL/scripts/epic-loop" "$(cat "$EV/${arms[0]}/sandbox/fixture-epic.txt")" \
+        --repo "$R" --log-dir "$out/smoke-logs" >/dev/null 2>&1 \
+        || die "the driver did not finish a stubbed run; see $out/smoke-logs"
+    grep -q '^  arg: /epic-loop .* --worker$' "$STUB_RECORD" \
+        || die "the stubbed run never reached the working call"
     note ""
-    note "PASS -- worktree, uv sync, pytest, gh stub, claude stub and driver preflight all work."
+    note "PASS -- worktree, uv sync, pytest, gh stub, claude stub, driver preflight and a stubbed driver run all work."
     note "results: $out"
     exit 0
 fi

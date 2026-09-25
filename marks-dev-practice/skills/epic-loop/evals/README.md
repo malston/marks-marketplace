@@ -21,8 +21,9 @@ somebody to clean up.
 A full comparison costs roughly $8 and takes about eight minutes. The baseline
 arm is the expensive half, because an arm that works beads inline burns turns
 until it hits the cap. Run `--smoke` first: it builds a sandbox, drives a
-worktree, `uv sync`, pytest, both stubs and the driver's preflight through it,
-and tells you the harness still works without launching anything.
+worktree, `uv sync`, pytest, both stubs, the driver's preflight and a full
+stubbed driver run through it, and tells you the harness still works without
+launching anything.
 
 An installed copy of an older version makes a good baseline:
 
@@ -86,7 +87,7 @@ An arm that claims it launched a run and did not is a failing arm.
 |---|---|
 | Armed the goal before the working call | the stub's record of `/goal` |
 | Launched exactly one background run | one call carrying `--resume` |
-| The working call carries the `--worker` marker | `/epic-loop <epic> --worker` |
+| The working call carries the `--worker` marker | `/epic-loop <epic> --review-budget 10.00 --worker` |
 | Created no worktree | `git worktree list` |
 | Claimed no beads | every child still `open` |
 | Left only the main branch | `git branch -a` |
@@ -106,10 +107,30 @@ stub calls runs high. Only calls carrying a slash command are the launcher's.
 | `grade-arm` | scores one arm into `grading.json` and `timing.json` |
 | `stubs/claude` | records its argv, never calls the API |
 | `stubs/gh` | answers the PR protocol plausibly |
+| `sandbox-probe` | checks the review sandbox blocks writes outside its directory |
+| `sandbox-review-probe` | runs a real review in a sandboxed clone |
+| `bg-wait-probe` | checks a `-p` session waiting with Monitor survives a background job past the Bash tool's 10-minute cap |
 
 Results are laid out the way the skill-creator viewer expects, so you can point
 `eval-viewer/generate_review.py` at the output directory and read them in a
 browser.
+
+## The review sandbox probes
+
+Step 5 of the skill runs each review as a sandboxed `claude -p` process in a
+throwaway clone. Three scripts check that the flags on that call still do
+their job. Unlike the comparison above, they call the real `claude` and spend
+real money. Run them after a Claude Code upgrade or before changing a flag.
+
+```bash
+./sandbox-probe                     # six arms, about $0.30 to $1.50 each
+./sandbox-probe escape-closed       # only the named arms
+./sandbox-review-probe ~/code/REPO PR [BUDGET] [REVIEW]
+./bg-wait-probe [SECONDS]           # takes as long as SECONDS, default 660
+```
+
+Each prints what it found and keeps its work directory under `~/.cache` for
+inspection. `references/how-the-run-works.md` says which flag each one backs.
 
 ## What this does not cover
 

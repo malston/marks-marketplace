@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+#
+# sandbox-review-probe -- can /code-review run as its own `claude -p` process
+# inside a sandboxed throwaway clone, and does it leave the real checkout alone?
+#
+# Stages a --shared clone of REPO the way epic-loop's step 5 does (PR head
+# detached at HEAD, main reset to origin/main; the PR head comes from GitHub's
+# pull/PR/head ref, so a merged PR works too), then runs REVIEW PR there with
+# the same flags step 5 uses: strict sandbox, user settings only, no MCP
+# servers, edit tools denied. REVIEW defaults to "/code-review medium".
+# Compares REPO's HEAD, branch, status and branch list before and after.
+# Prints PASS when the review finished, REPO is unchanged and no command
+# asked to leave the sandbox; exits 1 otherwise.
+#
+#   sandbox-review-probe REPO PR [BUDGET_USD] [REVIEW]
+#   sandbox-review-probe ~/code/marks-marketplace 1
+#   sandbox-review-probe ~/code/marks-marketplace 1 5 /pr-review-toolkit:review-pr
+
+set -uo pipefail
+
+[[ $# -lt 2 || "$1" == "-h" || "$1" == "--help" ]] && { sed -n 3,17p "$0"; exit 2; }
+REPO="$(cd "$1" && pwd)" || exit 2
+PR="$2"
+BUDGET="${3:-3.00}"
+REVIEW="${4:-/code-review medium}"
+
+WORK="$HOME/.cache/sandbox-review-probe"
+CLONE="$WORK/clone"
+rm -rf "$WORK"
+mkdir -p "$WORK"
+git clone -q --shared "$REPO" "$CLONE" &&
+git -C "$CLONE" remote set-url origin "$(git -C "$REPO" remote get-url origin)" &&
+git -C "$CLONE" fetch -q origin main "pull/$PR/head:refs/remotes/origin/pr-$PR" &&
+git -C "$CLONE" checkout -q --detach "origin/pr-$PR" &&
+git -C "$CLONE" branch -f --no-track main origin/main || { echo "could not stage the clone" >&2; exit 1; }
+
+snapshot() {
+    git -C "$REPO" rev-parse HEAD
+    git -C "$REPO" symbolic-ref -q --short HEAD || echo '(detached)'
+    git -C "$REPO" status --porcelain
+    git -C "$REPO" branch --format='%(refname:short)'
+}
+snapshot >"$WORK/before.txt"
+
+SETTINGS='{"sandbox":{"enabled":true,"allowUnsandboxedCommands":false,"failIfUnavailable":true}}'
+( cd "$CLONE" && env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN \
+    claude -p "$REVIEW $PR" \
+        --settings "$SETTINGS" \
+        --setting-sources user --strict-mcp-config \
+        --disallowedTools "Edit,Write,NotebookEdit" \
+        --append-system-prompt "PR $PR is checked out as HEAD and main is its base. Use git, not gh: gh cannot reach GitHub from this sandbox." \
+        --permission-mode bypassPermissions \
+        --max-budget-usd "$BUDGET" --max-turns 60 \
+        --output-format stream-json --verbose \
+        <&- >"$WORK/review.jsonl" 2>"$WORK/review.err" )
+printf 'claude exit=%s\n' "$?"
+printf 'range main...HEAD: %s\n' "$(git -C "$CLONE" diff --stat main...HEAD | tail -1)"
+printf '(empty for a merged PR, whose head is already in main; use an open PR to test the range)\n'
+
+snapshot >"$WORK/after.txt"
+unchanged=yes
+if diff -u "$WORK/before.txt" "$WORK/after.txt" >"$WORK/checkout.diff"; then
+    printf 'real checkout: unchanged\n'
+else
+    unchanged=no
+    printf 'real checkout: CHANGED\n'; cat "$WORK/checkout.diff"
+fi
+
+J="$WORK/review.jsonl"
+printf '\nresult: %s\n' "$(jq -c 'select(.type=="result") | {subtype, is_error, num_turns, cost: .total_cost_usd}' "$J")"
+printf 'tool calls: %s\n' "$(jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use") | .name' "$J" | sort | uniq -c | tr -s ' \n' ' ')"
+printf 'disableSandbox attempts: %s\n' "$(jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use") | select(.input.dangerouslyDisableSandbox == true) | .input.command' "$J" | wc -l | tr -d ' ')"
+
+printf '\nfailed tool results (first 8):\n'
+jq -r 'select(.type=="user") | .message.content[]? | select(.type=="tool_result" and .is_error == true)
+       | (.content | tostring | gsub("\\s+"; " ") | .[0:220])' "$J" | head -8
+
+SID="$(jq -r 'select(.type=="system" and .subtype=="init") | .session_id' "$J" | head -1)"
+SUBS=("$HOME"/.claude/projects/*sandbox-review-probe-clone/"$SID"/subagents/*.jsonl)
+printf '\nsubagent transcripts: %s\n' "$(ls "${SUBS[@]}" 2>/dev/null | wc -l | tr -d ' ')"
+printf 'subagent Bash calls (all):\n'
+for f in "${SUBS[@]}"; do [[ -f "$f" ]] || continue
+    jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use" and .name=="Bash")
+           | "  \(.input.command | gsub("\\s+"; " ") | .[0:140])  dis=\(.input.dangerouslyDisableSandbox // false)"' "$f"
+done
+printf 'subagent failed tool results:\n'
+for f in "${SUBS[@]}"; do [[ -f "$f" ]] || continue
+    jq -r 'select(.type=="user") | .message.content[]? | select(.type=="tool_result" and .is_error == true)
+           | "  " + (.content | tostring | gsub("\\s+"; " ") | .[0:220])' "$f"
+done
+
+printf '\nreview text (first 40 lines):\n'
+jq -r 'select(.type=="result") | .result // ""' "$J" | head -40
+[[ -s "$WORK/review.err" ]] && { printf '\nstderr:\n'; head -5 "$WORK/review.err"; }
+subtype="$(jq -r 'select(.type=="result") | .subtype' "$J")"
+escapes="$(cat "$J" "${SUBS[@]}" 2>/dev/null | jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use" and .input.dangerouslyDisableSandbox == true) | .id' | wc -l | tr -d ' ')"
+if [[ "$subtype" == success && "$unchanged" == yes && "$escapes" == 0 ]]; then v=PASS; rc=0; else v=FAIL; rc=1; fi
+printf '\n%s: result=%s, checkout unchanged=%s, sandbox escape attempts=%s\n' "$v" "$subtype" "$unchanged" "$escapes"
+printf 'work dir: %s\n' "$WORK"
+exit "$rc"

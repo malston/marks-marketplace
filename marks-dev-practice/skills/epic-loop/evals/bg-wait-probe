@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+#
+# bg-wait-probe -- can a `claude -p` session under bypassPermissions start a
+# Bash job that outlives the Bash tool's 10-minute cap, wait for it, and read
+# its output before the session exits?
+#
+# The job sleeps SECONDS (default 660, past the 600 s cap) and then writes a
+# marker file. Pass: the session's final answer quotes the marker and the
+# marker existed before claude exited. Takes as long as SECONDS plus a bit.
+#
+# FORMAT is claude's --output-format: stream-json (default) or text, which is
+# what the epic-loop driver uses for its working call.
+#
+# MODE "goal" runs the prompt the way the epic-loop driver does: arm a /goal
+# in a one-turn call, then resume that session with the prompt.
+#
+# SOURCES "all" loads every settings source, user hooks and plugins included,
+# as the driver's calls do; the default "local" loads almost nothing.
+#
+# The WAIT environment variable picks how the model is told to wait: monitor
+# (default), endturn (expected to fail) or free; the comment at its case
+# statement says why.
+#
+#   bg-wait-probe [SECONDS] [FORMAT] [plain|goal] [local|all|SETTINGS-FILE]
+#   bg-wait-probe 90 text goal all              # as the driver runs the worker
+#   WAIT=endturn bg-wait-probe 45 text goal all # shows the exit that kills jobs
+
+set -uo pipefail
+
+[[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { sed -n 3,26p "$0"; exit 0; }
+SECS="${1:-660}"
+FORMAT="${2:-stream-json}"
+MODE="${3:-plain}"
+SRC=(--setting-sources local)
+[[ "${4:-local}" == all ]] && SRC=()
+# A file path loads only that settings file on top of local, to narrow down
+# which user setting changes the behavior.
+[[ -f "${4:-}" ]] && SRC=(--setting-sources local --settings "$4")
+case "$FORMAT" in
+    stream-json) FMT=(--output-format stream-json --verbose) ;;
+    text)        FMT=(--output-format text) ;;
+    *) echo "FORMAT must be stream-json or text" >&2; exit 2 ;;
+esac
+
+WORK="$HOME/.cache/bg-wait-probe"
+rm -rf "$WORK"
+mkdir -p "$WORK"
+MARK="$WORK/marker.txt"
+# WAIT picks how the model waits. monitor (the default, and what epic-loop's
+# step 5 does) watches the marker with the Monitor tool. endturn ends the turn
+# and relies on the job's completion notice: a -p session then exits at the end
+# of the turn and the job dies with it, so this one is expected to FAIL. free
+# leaves the choice to the model, which makes the result vary run to run.
+case "${WAIT:-monitor}" in
+    endturn) WAIT_RULE=" Do not use the Monitor tool or any polling: end your turn now and rely on the completion notification." ;;
+    monitor) WAIT_RULE=" Use the Monitor tool with an until-loop on the marker file to wait for it." ;;
+    free)    WAIT_RULE="" ;;
+    *) echo "WAIT must be monitor, endturn or free" >&2; exit 2 ;;
+esac
+
+PROMPT="Start this exact command with the Bash tool, run in the background (run_in_background true):
+sleep $SECS && echo finished-\$(date +%s) > $MARK
+Then wait until it has finished. Do not start a second copy and do not kill it.$WAIT_RULE When it is done, run: cat $MARK
+and report that output verbatim as your final answer."
+
+RESUME=()
+if [[ "$MODE" == goal ]]; then
+    SID="$(uuidgen)"
+    ( cd "$WORK" && env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN \
+        claude -p "/goal The file $MARK exists and its contents have been reported" \
+            --session-id "$SID" ${SRC[@]+"${SRC[@]}"} \
+            --permission-mode bypassPermissions --max-turns 1 \
+            --disallowedTools "Bash,Edit,Write,NotebookEdit,Task,Agent" \
+            --output-format json <&- >"$WORK/arm.json" 2>&1 )
+    printf 'arm: %s\n' "$(jq -c '{subtype, is_error}' "$WORK/arm.json" 2>/dev/null || head -c 200 "$WORK/arm.json")"
+    RESUME=(--resume "$SID")
+fi
+
+start=$(date +%s)
+( cd "$WORK" && env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN \
+    claude -p "$PROMPT" ${RESUME[@]+"${RESUME[@]}"} \
+        ${SRC[@]+"${SRC[@]}"} \
+        --permission-mode bypassPermissions \
+        --max-budget-usd 2.00 --max-turns 30 \
+        "${FMT[@]}" \
+        <&- >"$WORK/run.out" 2>"$WORK/run.err" )
+rc=$?
+end=$(date +%s)
+marker_at_exit="$(cat "$MARK" 2>/dev/null || echo '(no marker)')"
+
+printf 'claude exit=%s after %ss (job sleeps %ss)\n' "$rc" "$((end - start))" "$SECS"
+printf 'marker when claude exited: %s\n' "$marker_at_exit"
+if [[ "$FORMAT" == stream-json ]]; then
+    printf 'result: %s\n' "$(jq -c 'select(.type=="result") | {subtype, num_turns, cost: .total_cost_usd, result: (.result // "" | .[0:200])}' "$WORK/run.out")"
+    printf 'tool calls:\n'
+    jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use")
+           | "  \(.name): \((.input.command // .input.description // "") | tostring | .[0:120]) bg=\(.input.run_in_background // false)"' "$WORK/run.out"
+else
+    printf 'output (last 5 lines):\n'; tail -5 "$WORK/run.out"
+fi
+if [[ "$marker_at_exit" == finished-* ]]; then echo "PASS: the session waited for the job"; rc=0; else echo "FAIL: the session exited before the job finished"; rc=1; fi
+sleep 5
+printf 'marker 5s later: %s\n' "$(cat "$MARK" 2>/dev/null || echo '(no marker)')"
+printf 'work dir: %s\n' "$WORK"
+exit "$rc"

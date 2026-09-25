@@ -1,7 +1,7 @@
 ---
 name: epic-loop
-description: Work every open child of a beads epic unattended. Type /epic-loop EPIC-ID in any Claude Code session that has bd, gh, git and claude available. It checks the epic, starts the run in the background, and hands back a log path and a resume command. Nothing to install first and no setup to understand. The run gives each bead its own worktree, branch and PR, writes a failing test first with the guard mutated to prove it bites, reviews in a fresh context, fixes serious findings and files the rest to a sibling findings epic, then merges the PR (or holds it for approval with --hold) and closes the bead before the next one starts. Design and keep-or-delete questions get a recommendation and a `human` tag instead of a decision. Takes --hold, --repo DIR and --dry-run. Not for a single bead, an epic with no children, or work that needs a human decision at every step.
-argument-hint: <epic-id> [--hold] [--repo DIR] [--dry-run]
+description: Work every open child of a beads epic unattended. Type /epic-loop EPIC-ID in any Claude Code session that has bd, gh, git and claude available. It checks the epic, starts the run in the background, and hands back a log path and a resume command. Nothing to install first and no setup to understand. The run gives each bead its own worktree, branch and PR, writes a failing test first with the guard mutated to prove it bites, reviews in a fresh context, fixes serious findings and files the rest to a sibling findings epic, then merges the PR (or holds it for approval with --hold) and closes the bead before the next one starts. Design and keep-or-delete questions get a recommendation and a `human` tag instead of a decision. Takes --hold, --repo DIR, --review-budget USD and --dry-run. Not for a single bead, an epic with no children, or work that needs a human decision at every step.
+argument-hint: <epic-id> [--hold] [--repo DIR] [--review-budget USD] [--dry-run]
 compatibility: >-
   Needs the beads issue tracker (bd) and a repository whose work is tracked as
   beads with parent/child links, plus git, gh, jq, uuidgen and the claude CLI.
@@ -15,7 +15,7 @@ Work the open children of a beads epic, one at a time, until every one is closed
 
 ## Which half of this file you are in
 
-Read `$ARGUMENTS` before anything else. The bead id is the first word that is not a flag, and it can appear anywhere in the line.
+Read `$ARGUMENTS` before anything else. The bead id is the first word that is neither a flag nor a flag's value (the dollar amount after `--review-budget` is a value), and it can appear anywhere in the line.
 
 - **`--worker` is present.** You are the run. Skip to [Working the run](#working-the-run) and follow it to the end. Everything in the next section is for a session that has not started yet.
 - **`--worker` is absent.** Someone typed this in their own session. You are starting a run, not working beads. Follow [Starting a run](#starting-a-run) and stop there.
@@ -34,7 +34,7 @@ The whole job is to check the epic, launch the driver in the background, and rep
    "$DRIVER" <bead> --dry-run [their other flags]
    ```
 
-   Pass their flags through untouched rather than deciding which ones you recognize. `--hold`, `--repo`, `--budget`, `--model`, `--max-turns`, `--turn-budget` and `--log-dir` all belong to the driver.
+   Pass their flags through untouched rather than deciding which ones you recognize. `--hold`, `--repo`, `--budget`, `--review-budget`, `--model`, `--max-turns`, `--turn-budget` and `--log-dir` all belong to the driver.
 
    A dry run spends nothing. It refuses, with a message that names the fix, a bead that does not exist, is closed, has no children or whose children are all settled, and it refuses a linked worktree or a missing dependency.
 
@@ -69,13 +69,13 @@ The two `claude` calls behind the driver, the arming of `/goal`, the API key it 
 
 ## Working the run
 
-Everything below here runs in the session the driver started. `EPIC` is the first word of `$ARGUMENTS`; `HOLD` is true if `--hold` appears.
+Everything below here runs in the session the driver started. `EPIC` is the first word of `$ARGUMENTS`; `HOLD` is true if `--hold` appears; `REVIEW_BUDGET` is the number after `--review-budget`, or 10 if it is absent.
 
 Run `bd show $EPIC` first. Its DESIGN field may carry epic-specific instructions, most often the order to work the children in and which beads pair into one PR. Follow those. If DESIGN carries a full loop protocol, that protocol wins over anything below.
 
 ### The turn counter
 
-A `/goal` re-evaluates the completion condition after every turn, waits for background review agents before judging, and survives a resumed session. The counter it stops at lives in the epic so a resumed session does not reset it.
+A `/goal` re-evaluates the completion condition after every turn and survives a resumed session. The counter it stops at lives in the epic so a resumed session does not reset it.
 
 The counter is a label, not a line in the notes. End every turn, whatever else happened in it, with one call:
 
@@ -91,7 +91,7 @@ If no goal is active, keep going anyway. End each turn by picking up the next be
 
 ### Paths
 
-`ROOT` is the main checkout, `git rev-parse --show-toplevel` run from where the session started. Worktrees live at `$ROOT/.claude/worktrees/<bead-id>`, and a review's throwaway worktree at `$ROOT/.claude/worktrees/review-<n>-<tag>`, always as absolute paths so a worktree is never created inside another. The main checkout belongs to the user. Never switch its branch, and never run a bare `git stash` (the stash stack is shared across worktrees).
+`ROOT` is the main checkout, `git rev-parse --show-toplevel` run from where the session started. Worktrees live at `$ROOT/.claude/worktrees/<bead-id>`, always as absolute paths so a worktree is never created inside another. A review's throwaway clone lives at `${TMPDIR:-/tmp}/epic-loop/review-<n>-<tag>`, outside `$ROOT`. The main checkout belongs to the user. Never switch its branch, and never run a bare `git stash` (the stash stack is shared across worktrees).
 
 ### Findings epic
 
@@ -99,7 +99,7 @@ Review findings you don't fix go under a sibling epic, never under `$EPIC`. On t
 
 ### Per bead
 
-1. **Pick and isolate.** From `$ROOT`, `git fetch origin`. List open PRs from this loop (`gh pr list --label epic-loop --json number,headRefName,files`). For each held PR whose bead is blocked, check `gh pr view <n> --json state`. If it merged, remove its worktree and branch as in step 7 and `bd close` its bead with the PR number. Then pick the next open bead whose files don't overlap any still-open PR from this loop. If every remaining bead overlaps an open PR, report which PRs need to land and [stop early](#stopping-early). Never base a worktree on another PR's branch. Create the worktree with `git worktree add --no-track -b <branch> $ROOT/.claude/worktrees/<bead-id> origin/main` (`--no-track` so `git push -u origin <branch>` works). If `git worktree list` already shows one for this bead, reuse it. `cd` into it, `uv sync --locked`, and run steps 2 to 6 from there, except step 5's probe and dispatch bullets.
+1. **Pick and isolate.** From `$ROOT`, `git fetch origin`. List open PRs from this loop (`gh pr list --label epic-loop --json number,headRefName,files`). For each held PR whose bead is blocked, check `gh pr view <n> --json state`. If it merged, remove its worktree and branch as in step 7 and `bd close` its bead with the PR number. Then pick the next open bead whose files don't overlap any still-open PR from this loop. If every remaining bead overlaps an open PR, report which PRs need to land and [stop early](#stopping-early). Never base a worktree on another PR's branch. Create the worktree with `git worktree add --no-track -b <branch> $ROOT/.claude/worktrees/<bead-id> origin/main` (`--no-track` so `git push -u origin <branch>` works). If `git worktree list` already shows one for this bead, reuse it. `cd` into it, `uv sync --locked`, and run steps 2 to 6 from there.
 
 2. **Claim and scope.** `bd update <id> --claim`. Re-read the bead. If an earlier PR already covered part of it, don't edit the bead's title or description. Write down exactly what you're dropping and why, and carry that into the PR body's "Trimmed" section and the bead's close reason. Batch beads that share a file into one PR and say so in the body.
 
@@ -107,11 +107,54 @@ Review findings you don't fix go under a sibling epic, never under `$EPIC`. On t
 
 4. **Open the PR.** `git push -u origin <branch>`, then `gh pr create --label epic-loop` with these sections: what changed, trimmed (what was dropped from the bead and why, or "nothing"), decisions left for the user, tests (red and green counts, mutations), verified by hand, what stays as is. Wait for CI in two steps. `gh pr checks <n> --watch` on its own returns at once before CI has registered the run, so first poll until the check exists (`until gh pr checks <n> | grep -q pytest; do sleep 10; done`), then `gh pr checks <n> --watch`.
 
-5. **Review in a fresh context, from a review worktree.** A review agent, and any reviewer a skill starts inside it, works in the directory this session is in when the agent is dispatched, and none of them sees the instructions you give the agent. `/code-review` has checked out a PR branch in the checkout it started in. A throwaway review worktree gives that nowhere harmful to land. Two things it does not do: the session's own directory drifts back to `$ROOT` on its own, which is how the first such checkout happened, and a reviewer can still reach any checkout by its path. Hence the probe and the comparison below. Run one review at a time, each in its own worktree, and treat `<tag>` as the review's name (`code-review`, `review-pr`).
-   - **Before each review.** `git fetch origin <branch>`; on a failure retry once, and if it fails again report it and pick up the next bead, leaving this one claimed. Clear anything a killed run left: `git worktree remove -f -f $ROOT/.claude/worktrees/review-<n>-<tag> 2>/dev/null; rm -rf $ROOT/.claude/worktrees/review-<n>-<tag>; git worktree prune`. Then `git worktree add --detach $ROOT/.claude/worktrees/review-<n>-<tag> origin/<branch>` and `cd` into it. Record, for `$ROOT` and for the bead's worktree, `git -C <dir> rev-parse HEAD` and `git -C <dir> symbolic-ref -q --short HEAD || echo '(detached)'`, plus `git -C <bead's worktree> status --porcelain`. Two things stay out of the comparison, so say so in the review round rather than relying on them: `$ROOT`'s uncommitted files, since the user may be editing there, and any local branch a reviewer creates, since `/code-review` makes a `pr<n>` branch on a healthy run.
-   - **Probe.** Dispatch a throwaway agent whose whole prompt is to run `pwd` and report it. If it does not name the review worktree, the directory did not move, so [stop early](#stopping-early) instead of dispatching the review.
-   - **Dispatch.** A subagent whose entire prompt is the PR number and the instruction to run `/code-review medium <n>` (the level comes before the target) against `gh pr diff <n>` and `git show origin/<branch>:<path>`. Pass it nothing from this session. Its output is the review. If the PR carries a bead of priority P0, P1, P2 or P3, repeat this bullet and the two around it for `/pr-review-toolkit:review-pr <n>`, in its own worktree, once the first review is back. A PR whose beads are all P4 stops at `/code-review`. Do not `cd` away until the review has returned its output.
-   - **After each review.** Only once the review is back, run the recorded commands again. If any value differs, name any leftover `review-<n>-*` worktree and [stop early](#stopping-early), naming the checkout and what changed, and leave that checkout as it is. Otherwise `cd` to the bead's worktree, `git worktree remove -f -f $ROOT/.claude/worktrees/review-<n>-<tag>`, and name in the PR body's review round any local branch that `git branch --format='%(refname:short)'` now shows and the record did not. Delete none of them. Stay in the bead's worktree until the bead's fixes are pushed.
+5. **Review in a fresh process, from a sandboxed clone.** Each review runs as its own `claude -p` process started inside a throwaway clone of the repository. It starts in the clone, so it has no working directory to drift from, and the clone has its own HEAD, branches and index, so a checkout there cannot move `$ROOT` or the bead's worktree. The strict sandbox stops its Bash commands, and those of any subagent it starts, from writing outside the clone and the session temp directory, including a retry with the sandbox disabled. The sandbox covers only Bash, so the edit tools are denied, MCP servers are not loaded, and project settings (and so the PR branch's own hooks) are skipped. Run one review at a time, each in its own clone, and treat `<tag>` as the review's name (`code-review`, `review-pr`). Every block below is its own Bash call, and a shell variable does not survive from one call to the next, so each block sets `C` itself.
+   - **Before each review.** Record, for `$ROOT` and for the bead's worktree, `git -C <dir> rev-parse HEAD`, `git -C <dir> symbolic-ref -q --short HEAD || echo '(detached)'` and `git -C <dir> branch --format='%(refname:short)'`, plus `git -C <bead's worktree> status --porcelain`. `$ROOT`'s uncommitted files stay out of the comparison, since the user may be editing there, so say so in the review round rather than relying on it. Then build the clone:
+
+     ```bash
+     C="${TMPDIR:-/tmp}/epic-loop/review-<n>-<tag>"
+     rm -rf "$C" "$C.json" "$C.done"
+     git clone -q --shared "$ROOT" "$C" &&
+     git -C "$C" remote set-url origin "$(git -C "$ROOT" remote get-url origin)" &&
+     git -C "$C" fetch -q origin main <branch> &&
+     git -C "$C" checkout -q --detach origin/<branch> &&
+     git -C "$C" branch -f --no-track main origin/main
+     ```
+
+     The detached HEAD and the reset `main` matter: `/code-review` diffs `@{upstream}...HEAD`, falling back to `main...HEAD`, so `main` must be the current `origin/main`. If the block fails, run it again once from the top, which rebuilds the clone. If it fails again, remove the clone (see **Giving up** below), report it and pick up the next bead, leaving this one claimed.
+   - **Run.** From the clone, with nothing from this session in the prompt:
+
+     ```bash
+     C="${TMPDIR:-/tmp}/epic-loop/review-<n>-<tag>"
+     (cd "${C:?}" && claude -p "/code-review medium <n>" \
+         --settings '{"sandbox":{"enabled":true,"allowUnsandboxedCommands":false,"failIfUnavailable":true}}' \
+         --setting-sources user --strict-mcp-config \
+         --disallowedTools "Edit,Write,NotebookEdit" \
+         --append-system-prompt "PR <n> is checked out as HEAD and main is its base. Use git, not gh: gh cannot reach GitHub from this sandbox." \
+         --permission-mode bypassPermissions \
+         --max-budget-usd <REVIEW_BUDGET> --output-format json </dev/null >"$C.json"); echo $? >"${C:?}.done"
+     ```
+
+     Start it with `run_in_background`, because a review can outlast the Bash tool's 10-minute cap. Then, before the turn ends, wait on it with the Monitor tool (load it with ToolSearch if it is deferred), using the longest timeout it allows:
+
+     ```bash
+     C="${TMPDIR:-/tmp}/epic-loop/review-<n>-<tag>"
+     until [ -e "$C.done" ]; do sleep 10; done; echo "review done: exit $(cat "$C.done")"
+     ```
+
+     If the monitor expires before the review is done, arm it again. Never end a turn with only the background job running: a `claude -p` session exits when a turn ends unless a monitor is still running, and the review dies with it. Never start a second copy while the first is running.
+
+     The sentence goes in `--append-system-prompt` and not in the prompt, because everything after the slash command becomes that command's arguments. The sandbox blocks `gh` on macOS because Go tools need the system TLS trust service. `sandbox.enableWeakerNetworkIsolation` would open it, but it also opens an exfiltration path, and the reviewer gets everything it needs from `git`. `--strict-mcp-config` with no `--mcp-config` loads no MCP servers, since MCP tools run outside the sandbox and bypass mode would let a reviewer push, merge or send through them unasked.
+
+     The review is `jq -r .result` of `$C.json`. If its `.subtype` is not `success`, the review did not finish: rebuild the clone with the **Before** block and run it once more, and if that fails too, give up on the review as below. If the PR carries a bead of priority P0, P1, P2 or P3, repeat these bullets for `/pr-review-toolkit:review-pr <n>` with its own clone once the first review is back. A PR whose beads are all P4 stops at `/code-review`.
+   - **After each review.** Run the recorded commands again. If any value differs, [stop early](#stopping-early), naming the checkout and what changed and the clone's path, and leave both as they are. Otherwise remove the clone:
+
+     ```bash
+     C="${TMPDIR:-/tmp}/epic-loop/review-<n>-<tag>"
+     rm -rf "${C:?}" "$C.json" "$C.done"
+     ```
+
+     Stay in the bead's worktree until the bead's fixes are pushed.
+   - **Giving up.** A review abandoned after its second failure leaves nothing behind: run the removal block above, then report the failure and pick up the next bead, leaving this one claimed.
 
 6. **Fix or file.** Fix every finding the reviews label Critical, Important or HIGH, and any finding that is a correctness or security defect whatever its label, in one review commit. Re-run checks. Add a "Review round" section to the PR body. File everything else under the findings epic after `bd search` for a duplicate, P3 for behavioural, P4 for style or simplification, with "PR <n> review" in the description. Findings outside the bead's scope are filed, never fixed in this PR.
 
@@ -143,7 +186,7 @@ A bead that asks whether to keep or delete code, or that has an open design ques
 - Base a worktree on another PR's branch.
 - File a finding under `$EPIC`.
 - Review a diff from the session that wrote it.
-- Dispatch a review agent from `$ROOT` or a bead's worktree.
+- Run a review anywhere but its own sandboxed clone.
 - Merge in hold mode.
 - Bump the version, tag, or cut a release.
 
