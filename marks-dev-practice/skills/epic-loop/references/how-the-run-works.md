@@ -14,7 +14,7 @@ SID="$(uuidgen)"
 claude -p "/goal <condition>" --session-id "$SID" --max-turns 1 \
     --disallowedTools "Bash,Edit,Write,NotebookEdit,Task,Agent"
 
-claude -p "/epic-loop <bead-id> [--hold] --worker" --resume "$SID" \
+claude -p "/epic-loop <bead-id> [--hold] --review-budget 10.00 --worker" --resume "$SID" \
     --permission-mode bypassPermissions --max-turns 400
 ```
 
@@ -87,8 +87,11 @@ rewrites it at the end of every turn.
 `--budget` is a third limit, in dollars, and it does not cover everything. It
 becomes `--max-budget-usd` on the working call, which counts that session and
 its subagents. Each review in step 5 is a separate `claude -p` process with its
-own `--max-budget-usd 10`, so reviews spend on top of `--budget`: up to $40 a
-bead when both reviews run and each is retried once.
+own cap, set by `--review-budget` (default $10), which the driver passes to the
+skill in the working prompt. Reviews spend on top of `--budget`: up to four
+times `--review-budget` a bead, when both reviews run and each is retried once.
+The $10 default is a guess with headroom: the only measured reviews, on a
+one-line PR, cost $0.33 to $1.01.
 
 ## The API key
 
@@ -167,6 +170,8 @@ epic-loop BEAD-ID [options]
   --dry-run            Print the exact calls and exit; spends nothing
   --budget USD         Max API spend for the working call; reviews add their own
                        (default: 200.00)
+  --review-budget USD  Max API spend for each review, on top of --budget
+                       (default: 10.00)
   --max-turns N        Claude Code turn cap for the working call (default: 400)
   --turn-budget N      Parent's turn counter the goal stops at (default: 20)
   --model NAME         Model (default: claude-opus-5)

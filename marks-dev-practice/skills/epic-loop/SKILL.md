@@ -1,7 +1,7 @@
 ---
 name: epic-loop
 description: Work every open child of a beads epic unattended. Type /epic-loop EPIC-ID in any Claude Code session that has bd, gh, git and claude available. It checks the epic, starts the run in the background, and hands back a log path and a resume command. Nothing to install first and no setup to understand. The run gives each bead its own worktree, branch and PR, writes a failing test first with the guard mutated to prove it bites, reviews in a fresh context, fixes serious findings and files the rest to a sibling findings epic, then merges the PR (or holds it for approval with --hold) and closes the bead before the next one starts. Design and keep-or-delete questions get a recommendation and a `human` tag instead of a decision. Takes --hold, --repo DIR and --dry-run. Not for a single bead, an epic with no children, or work that needs a human decision at every step.
-argument-hint: <epic-id> [--hold] [--repo DIR] [--dry-run]
+argument-hint: <epic-id> [--hold] [--repo DIR] [--review-budget USD] [--dry-run]
 compatibility: >-
   Needs the beads issue tracker (bd) and a repository whose work is tracked as
   beads with parent/child links, plus git, gh, jq, uuidgen and the claude CLI.
@@ -15,7 +15,7 @@ Work the open children of a beads epic, one at a time, until every one is closed
 
 ## Which half of this file you are in
 
-Read `$ARGUMENTS` before anything else. The bead id is the first word that is not a flag, and it can appear anywhere in the line.
+Read `$ARGUMENTS` before anything else. The bead id is the first word that is neither a flag nor a flag's value (the dollar amount after `--review-budget` is a value), and it can appear anywhere in the line.
 
 - **`--worker` is present.** You are the run. Skip to [Working the run](#working-the-run) and follow it to the end. Everything in the next section is for a session that has not started yet.
 - **`--worker` is absent.** Someone typed this in their own session. You are starting a run, not working beads. Follow [Starting a run](#starting-a-run) and stop there.
@@ -34,7 +34,7 @@ The whole job is to check the epic, launch the driver in the background, and rep
    "$DRIVER" <bead> --dry-run [their other flags]
    ```
 
-   Pass their flags through untouched rather than deciding which ones you recognize. `--hold`, `--repo`, `--budget`, `--model`, `--max-turns`, `--turn-budget` and `--log-dir` all belong to the driver.
+   Pass their flags through untouched rather than deciding which ones you recognize. `--hold`, `--repo`, `--budget`, `--review-budget`, `--model`, `--max-turns`, `--turn-budget` and `--log-dir` all belong to the driver.
 
    A dry run spends nothing. It refuses, with a message that names the fix, a bead that does not exist, is closed, has no children or whose children are all settled, and it refuses a linked worktree or a missing dependency.
 
@@ -69,7 +69,7 @@ The two `claude` calls behind the driver, the arming of `/goal`, the API key it 
 
 ## Working the run
 
-Everything below here runs in the session the driver started. `EPIC` is the first word of `$ARGUMENTS`; `HOLD` is true if `--hold` appears.
+Everything below here runs in the session the driver started. `EPIC` is the first word of `$ARGUMENTS`; `HOLD` is true if `--hold` appears; `REVIEW_BUDGET` is the number after `--review-budget`, or 10 if it is absent.
 
 Run `bd show $EPIC` first. Its DESIGN field may carry epic-specific instructions, most often the order to work the children in and which beads pair into one PR. Follow those. If DESIGN carries a full loop protocol, that protocol wins over anything below.
 
@@ -131,7 +131,7 @@ Review findings you don't fix go under a sibling epic, never under `$EPIC`. On t
          --disallowedTools "Edit,Write,NotebookEdit" \
          --append-system-prompt "PR <n> is checked out as HEAD and main is its base. Use git, not gh: gh cannot reach GitHub from this sandbox." \
          --permission-mode bypassPermissions \
-         --max-budget-usd 10 --output-format json </dev/null >"$C.json")
+         --max-budget-usd <REVIEW_BUDGET> --output-format json </dev/null >"$C.json")
      ```
 
      Start it with `run_in_background`, because a review can outlast the Bash tool's 10-minute cap. A turn can end while it runs, and the session is prompted again when the job exits; until then, keep waiting for this review rather than starting other work, and never start a second copy while the first is running.

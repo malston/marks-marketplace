@@ -196,18 +196,29 @@ printf '\n=== the working call is marked as the run itself ===\n'
 # it the session starts a run. A launcher that received it would loop on itself.
 STUB_EXIT_1=1 STUB_EXIT_2=0 run_driver "$EPIC" >/dev/null 2>&1
 check "working prompt carries the run marker" "1" \
-    "$(grep -c "^  arg: /epic-loop $EPIC --worker\$" "$STUB_RECORD")"
+    "$(grep -c "^  arg: /epic-loop $EPIC --review-budget 10.00 --worker\$" "$STUB_RECORD")"
 check "goal prompt does not" "0" "$(grep -c '^  arg: /goal .*--worker' "$STUB_RECORD")"
 
 STUB_EXIT_1=1 STUB_EXIT_2=0 run_driver "$EPIC" --hold >/dev/null 2>&1
 check "hold and the run marker both reach the skill" "1" \
-    "$(grep -c "^  arg: /epic-loop $EPIC --hold --worker\$" "$STUB_RECORD")"
+    "$(grep -c "^  arg: /epic-loop $EPIC --hold --review-budget 10.00 --worker\$" "$STUB_RECORD")"
 
 printf '\n=== budget and model reach both calls ===\n'
 STUB_EXIT_1=1 STUB_EXIT_2=0 run_driver "$EPIC" \
     --budget 12.50 --model claude-sonnet-5 >/dev/null 2>&1
 check "budget in both calls" "2" "$(grep -c '^  arg: 12.50$' "$STUB_RECORD")"
 check "model in both calls" "2" "$(grep -c '^  arg: claude-sonnet-5$' "$STUB_RECORD")"
+
+printf '\n=== the review budget reaches the skill, not claude ===\n'
+# Reviews are separate claude -p processes the skill starts, so their cap has
+# to travel in the working prompt; claude's own --max-budget-usd is --budget.
+STUB_EXIT_1=1 STUB_EXIT_2=0 run_driver "$EPIC" --review-budget 3.50 >/dev/null 2>&1
+check "review budget in the working prompt" "1" \
+    "$(grep -c "^  arg: /epic-loop $EPIC --review-budget 3.50 --worker\$" "$STUB_RECORD")"
+check "review budget not in the goal prompt" "0" "$(grep -c '^  arg: /goal .*--review-budget' "$STUB_RECORD")"
+check "review budget not passed as a claude cap" "0" "$(grep -c '^  arg: 3.50$' "$STUB_RECORD")"
+run_driver "$EPIC" --review-budget 3.50 --dry-run >"$WORK/rb.out" 2>&1
+check "dry run shows the review budget" "1" "$(grep -c 'review budget: \$3.50 per review' "$WORK/rb.out")"
 
 printf '\n=== any parent type is accepted, not just epics ===\n'
 STUB_EXIT_1=1 STUB_EXIT_2=0 run_driver "$FEATURE" >"$WORK/t6.out" 2>&1

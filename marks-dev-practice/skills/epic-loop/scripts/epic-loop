@@ -42,6 +42,11 @@ readonly DEFAULT_MAX_TURNS=400
 readonly DEFAULT_TURN_BUDGET=20
 
 readonly DEFAULT_BUDGET=200.00
+
+# The cap on each review the skill starts in step 5. A review is its own
+# claude -p process, so --budget does not cover it; the value travels to the
+# skill in the working prompt.
+readonly DEFAULT_REVIEW_BUDGET=10.00
 readonly DEFAULT_MODEL=claude-opus-5
 readonly DEFAULT_LOG_DIR="${HOME}/.local/state/epic-loop"
 
@@ -91,6 +96,8 @@ Options:
     --dry-run            Print the exact claude calls and exit; spends nothing
     --budget USD         Max API spend for the working call; reviews add their own
                          (default: $DEFAULT_BUDGET)
+    --review-budget USD  Max API spend for each review, on top of --budget
+                         (default: $DEFAULT_REVIEW_BUDGET)
     --max-turns N        Claude Code turn cap for the working call
                          (default: $DEFAULT_MAX_TURNS)
     --turn-budget N      Parent's turn counter the goal stops at
@@ -246,6 +253,7 @@ quote_cmd() {
 main() {
     local epic="" hold="" repo="" dry_run=false
     local budget="$DEFAULT_BUDGET" max_turns="$DEFAULT_MAX_TURNS"
+    local review_budget="$DEFAULT_REVIEW_BUDGET"
     local turn_budget="$DEFAULT_TURN_BUDGET" model="$DEFAULT_MODEL"
     local log_dir="$DEFAULT_LOG_DIR" session_id=""
 
@@ -256,6 +264,7 @@ main() {
             --dry-run)      dry_run=true; shift ;;
             --repo)         repo="${2:?--repo needs a directory}"; shift 2 ;;
             --budget)       budget="${2:?--budget needs a dollar amount}"; shift 2 ;;
+            --review-budget) review_budget="${2:?--review-budget needs a dollar amount}"; shift 2 ;;
             --max-turns)    max_turns="${2:?--max-turns needs a number}"; shift 2 ;;
             --turn-budget)  turn_budget="${2:?--turn-budget needs a number}"; shift 2 ;;
             --model)        model="${2:?--model needs a name}"; shift 2 ;;
@@ -341,7 +350,7 @@ main() {
     # get too, spawning a driver that spawns a driver.
     local -a work_cmd=(
         "${claude_prefix[@]}"
-        claude -p "/epic-loop ${epic}${hold:+ $hold} --worker"
+        claude -p "/epic-loop ${epic}${hold:+ $hold} --review-budget ${review_budget} --worker"
         --resume "$session_id"
         --permission-mode bypassPermissions
         --model "$model"
@@ -357,6 +366,7 @@ bead:         $epic ($kind, $pending child(ren) needing work)
 mode:         $mode
 session id:   $session_id
 budget:       \$$budget
+review budget: \$$review_budget per review, on top of the budget
 max turns:    $max_turns (claude) / $turn_budget ($kind counter)
 log dir:      $log_dir
 
@@ -380,7 +390,7 @@ EOF
     note "bead:       $epic ($kind, $pending child(ren) needing work)"
     note "mode:       $mode"
     note "session:    $session_id"
-    note "budget:     \$$budget"
+    note "budget:     \$$budget, plus \$$review_budget per review"
     note "log:        $log_file"
     note "resume:     claude --resume $session_id"
     note ""

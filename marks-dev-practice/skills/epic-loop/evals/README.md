@@ -86,7 +86,7 @@ An arm that claims it launched a run and did not is a failing arm.
 |---|---|
 | Armed the goal before the working call | the stub's record of `/goal` |
 | Launched exactly one background run | one call carrying `--resume` |
-| The working call carries the `--worker` marker | `/epic-loop <epic> --worker` |
+| The working call carries the `--worker` marker | `/epic-loop <epic> --review-budget 10.00 --worker` |
 | Created no worktree | `git worktree list` |
 | Claimed no beads | every child still `open` |
 | Left only the main branch | `git branch -a` |
