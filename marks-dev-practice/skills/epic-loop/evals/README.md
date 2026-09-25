@@ -21,8 +21,9 @@ somebody to clean up.
 A full comparison costs roughly $8 and takes about eight minutes. The baseline
 arm is the expensive half, because an arm that works beads inline burns turns
 until it hits the cap. Run `--smoke` first: it builds a sandbox, drives a
-worktree, `uv sync`, pytest, both stubs and the driver's preflight through it,
-and tells you the harness still works without launching anything.
+worktree, `uv sync`, pytest, both stubs, the driver's preflight and a full
+stubbed driver run through it, and tells you the harness still works without
+launching anything.
 
 An installed copy of an older version makes a good baseline:
 
