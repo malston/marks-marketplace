@@ -38,8 +38,7 @@ readonly DEFAULT_MAX_TURNS=400
 
 # Passed into the goal text as the parent's own turn counter, which the skill
 # stores as a turns-<N> label on the parent so a resumed session does not
-# reset it. This
-# is a different number from --max-turns above.
+# reset it. This is a different number from --max-turns above.
 readonly DEFAULT_TURN_BUDGET=20
 
 readonly DEFAULT_BUDGET=200.00
