@@ -279,6 +279,11 @@ main() {
 
     [[ -n "$epic" ]] || { usage >&2; die "EPIC-ID is required"; }
 
+    # The review budget reaches claude only at step 5, hours into the run, so a
+    # bad value is refused here rather than there.
+    [[ "$review_budget" =~ ^[0-9]+(\.[0-9]+)?$ && "$review_budget" =~ [1-9] ]] \
+        || die "--review-budget needs a dollar amount above zero, got: $review_budget"
+
     require_cmd claude
     require_cmd bd
     require_cmd gh

@@ -231,6 +231,15 @@ stub_calls() {
     [[ -f "$STUB_RECORD" ]] && grep -c -- '--- stub call ---' "$STUB_RECORD" || printf '0'
 }
 
+printf '\n=== a review budget that is not a positive amount is refused ===\n'
+# It only reaches claude at step 5, hours in, so the driver checks it up front.
+for bad in abc 0 0.00 -5 "5 --hold"; do
+    : >"$STUB_RECORD"
+    run_driver "$EPIC" --review-budget "$bad" >"$WORK/rb-bad.out" 2>&1
+    check "review budget '$bad' refused" "1" "$?"
+    check "review budget '$bad' refused before any call" "0" "$(stub_calls)"
+done
+
 printf '\n=== the arming call reports JSON, and its one-turn cap is expected ===\n'
 STUB_EXIT_1=1 STUB_EXIT_2=0 run_driver "$EPIC" >"$WORK/t10.out" 2>&1
 check "driver exits 0 after the cap" "0" "$?"
