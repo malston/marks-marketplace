@@ -89,7 +89,8 @@ Options:
     --hold               Stop each bead at ready-for-review; never merge
     --repo DIR           Target repository (default: git root of \$PWD)
     --dry-run            Print the exact claude calls and exit; spends nothing
-    --budget USD         Max API spend (default: $DEFAULT_BUDGET)
+    --budget USD         Max API spend for the working call; reviews add their own
+                         (default: $DEFAULT_BUDGET)
     --max-turns N        Claude Code turn cap for the working call
                          (default: $DEFAULT_MAX_TURNS)
     --turn-budget N      Parent's turn counter the goal stops at

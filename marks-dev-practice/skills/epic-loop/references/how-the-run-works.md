@@ -74,7 +74,7 @@ arm the goal with `/goal <condition>` and then type `/epic-loop <bead-id>
 prompt it between beads: a session yields to you at the end of every turn, and
 only the `-p` calls above run unattended.
 
-## Two different budgets
+## Three different budgets
 
 `--max-turns` is Claude Code's own cap on the working call, a runaway stop. The
 loop spends turns fast: one bead runs a failing test, a mutation round, a PR, a
@@ -83,6 +83,12 @@ fresh-context review and a fix commit.
 The turn counter in the goal condition is a different number. It lives in the
 parent bead as a `turns-<N>` label so a resumed session does not reset it, and the skill
 rewrites it at the end of every turn.
+
+`--budget` is a third limit, in dollars, and it does not cover everything. It
+becomes `--max-budget-usd` on the working call, which counts that session and
+its subagents. Each review in step 5 is a separate `claude -p` process with its
+own `--max-budget-usd 10`, so reviews spend on top of `--budget`: up to $40 a
+bead when both reviews run and each is retried once.
 
 ## The API key
 
@@ -110,17 +116,24 @@ clone.
 Each flag on that call closes a gap that a test on Claude Code 2.1.281 (macOS)
 showed was open:
 
-- `sandbox.enabled`: Bash commands can write only inside the clone. It holds
-  under `--permission-mode bypassPermissions`, and it covers subagents the
-  reviewer starts.
+- `sandbox.enabled`: Bash commands can write only inside the clone and the
+  session temp directory. It holds under `--permission-mode bypassPermissions`,
+  and it covers subagents the reviewer starts.
 - `sandbox.allowUnsandboxedCommands: false`: without it, a command that fails
   in the sandbox can be retried with `dangerouslyDisableSandbox`, and under
   bypass mode that retry runs unsandboxed with nothing asking first.
 - `sandbox.failIfUnavailable: true`: a sandbox that cannot start otherwise
   falls back to running commands unsandboxed, with only a warning.
 - `--disallowedTools "Edit,Write,NotebookEdit"`: the sandbox covers Bash only.
+- `--strict-mcp-config`, with no `--mcp-config`: MCP tools run outside the
+  sandbox. With user settings loaded, a reviewer had 247 of them, including
+  ones that push, merge and send mail; with this flag it had none.
+- `--setting-sources user`: keeps the user's plugins, which supply the review
+  commands, and skips project and local settings, so hooks committed on the PR
+  branch never run.
 - `--max-budget-usd`: a separate process is outside the driver's
-  `--max-budget-usd`, which covers the worker and its subagents only.
+  `--max-budget-usd`, which covers the worker and its subagents only. See
+  [Three different budgets](#three-different-budgets).
 
 Command-line `--settings` outrank user, project and local settings, so a
 user-level `allowUnsandboxedCommands: true` does not reopen the retry.
@@ -137,8 +150,9 @@ with `run_in_background` and waits for the completion notice. A `-p` session
 stays alive while a background job runs and is re-prompted when it exits.
 
 `evals/sandbox-probe`, `evals/sandbox-review-probe` and `evals/bg-wait-probe`
-re-run those tests. Each spends real money, from about $0.30 to $1.50 an arm;
-run them after a Claude Code upgrade or before changing a flag.
+re-run those tests. Each calls the real `claude` and spends real money, from
+about $0.30 an arm up to the budget each script passes; run them after a Claude
+Code upgrade or before changing a flag.
 
 ## The driver
 
@@ -151,7 +165,8 @@ epic-loop BEAD-ID [options]
   --hold               Stop each bead at ready-for-review; never merge
   --repo DIR           Target repository (default: git root of $PWD)
   --dry-run            Print the exact calls and exit; spends nothing
-  --budget USD         Max API spend (default: 200.00)
+  --budget USD         Max API spend for the working call; reviews add their own
+                       (default: 200.00)
   --max-turns N        Claude Code turn cap for the working call (default: 400)
   --turn-budget N      Parent's turn counter the goal stops at (default: 20)
   --model NAME         Model (default: claude-opus-5)

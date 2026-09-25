@@ -75,7 +75,7 @@ Run `bd show $EPIC` first. Its DESIGN field may carry epic-specific instructions
 
 ### The turn counter
 
-A `/goal` re-evaluates the completion condition after every turn, waits for background review agents before judging, and survives a resumed session. The counter it stops at lives in the epic so a resumed session does not reset it.
+A `/goal` re-evaluates the completion condition after every turn and survives a resumed session. The counter it stops at lives in the epic so a resumed session does not reset it.
 
 The counter is a label, not a line in the notes. End every turn, whatever else happened in it, with one call:
 
@@ -107,39 +107,47 @@ Review findings you don't fix go under a sibling epic, never under `$EPIC`. On t
 
 4. **Open the PR.** `git push -u origin <branch>`, then `gh pr create --label epic-loop` with these sections: what changed, trimmed (what was dropped from the bead and why, or "nothing"), decisions left for the user, tests (red and green counts, mutations), verified by hand, what stays as is. Wait for CI in two steps. `gh pr checks <n> --watch` on its own returns at once before CI has registered the run, so first poll until the check exists (`until gh pr checks <n> | grep -q pytest; do sleep 10; done`), then `gh pr checks <n> --watch`.
 
-5. **Review in a fresh process, from a sandboxed clone.** Each review runs as its own `claude -p` process started inside a throwaway clone of the repository. It starts in the clone, so it has no working directory to drift from, and the clone has its own HEAD, branches and index, so a checkout there cannot move `$ROOT` or the bead's worktree. The strict sandbox stops its Bash commands, and those of any subagent it starts, from writing outside the clone, including a retry with the sandbox disabled. The sandbox covers only Bash, so the edit tools are denied. Run one review at a time, each in its own clone, and treat `<tag>` as the review's name (`code-review`, `review-pr`).
+5. **Review in a fresh process, from a sandboxed clone.** Each review runs as its own `claude -p` process started inside a throwaway clone of the repository. It starts in the clone, so it has no working directory to drift from, and the clone has its own HEAD, branches and index, so a checkout there cannot move `$ROOT` or the bead's worktree. The strict sandbox stops its Bash commands, and those of any subagent it starts, from writing outside the clone and the session temp directory, including a retry with the sandbox disabled. The sandbox covers only Bash, so the edit tools are denied, MCP servers are not loaded, and project settings (and so the PR branch's own hooks) are skipped. Run one review at a time, each in its own clone, and treat `<tag>` as the review's name (`code-review`, `review-pr`). Every block below is its own Bash call, and a shell variable does not survive from one call to the next, so each block sets `C` itself.
    - **Before each review.** Record, for `$ROOT` and for the bead's worktree, `git -C <dir> rev-parse HEAD`, `git -C <dir> symbolic-ref -q --short HEAD || echo '(detached)'` and `git -C <dir> branch --format='%(refname:short)'`, plus `git -C <bead's worktree> status --porcelain`. `$ROOT`'s uncommitted files stay out of the comparison, since the user may be editing there, so say so in the review round rather than relying on it. Then build the clone:
 
      ```bash
      C="${TMPDIR:-/tmp}/epic-loop/review-<n>-<tag>"
      rm -rf "$C" "$C.json"
-     git clone -q --shared "$ROOT" "$C"
-     git -C "$C" remote set-url origin "$(git -C "$ROOT" remote get-url origin)"
-     git -C "$C" fetch -q origin main <branch>
-     git -C "$C" checkout -q --detach origin/<branch>
-     git -C "$C" branch -f main origin/main
+     git clone -q --shared "$ROOT" "$C" &&
+     git -C "$C" remote set-url origin "$(git -C "$ROOT" remote get-url origin)" &&
+     git -C "$C" fetch -q origin main <branch> &&
+     git -C "$C" checkout -q --detach origin/<branch> &&
+     git -C "$C" branch -f --no-track main origin/main
      ```
 
-     The detached HEAD and the reset `main` matter: `/code-review` diffs `@{upstream}...HEAD`, falling back to `main...HEAD`, so `main` must be the current `origin/main`. On a fetch failure retry once, and if it fails again report it and pick up the next bead, leaving this one claimed.
-
+     The detached HEAD and the reset `main` matter: `/code-review` diffs `@{upstream}...HEAD`, falling back to `main...HEAD`, so `main` must be the current `origin/main`. If the block fails, run it again once from the top, which rebuilds the clone. If it fails again, remove the clone (see **Giving up** below), report it and pick up the next bead, leaving this one claimed.
    - **Run.** From the clone, with nothing from this session in the prompt:
 
      ```bash
-     (cd "$C" && claude -p "/code-review medium <n>" \
+     C="${TMPDIR:-/tmp}/epic-loop/review-<n>-<tag>"
+     (cd "${C:?}" && claude -p "/code-review medium <n>" \
          --settings '{"sandbox":{"enabled":true,"allowUnsandboxedCommands":false,"failIfUnavailable":true}}' \
+         --setting-sources user --strict-mcp-config \
          --disallowedTools "Edit,Write,NotebookEdit" \
          --append-system-prompt "PR <n> is checked out as HEAD and main is its base. Use git, not gh: gh cannot reach GitHub from this sandbox." \
          --permission-mode bypassPermissions \
          --max-budget-usd 10 --output-format json </dev/null >"$C.json")
      ```
 
-     Start it with `run_in_background`, because a review can outlast the Bash tool's 10-minute cap. Wait for its completion notice before reading `$C.json`, and do not start a second copy while the first is running. The session stays alive while a background job runs and is re-prompted when the job exits.
+     Start it with `run_in_background`, because a review can outlast the Bash tool's 10-minute cap. A turn can end while it runs, and the session is prompted again when the job exits; until then, keep waiting for this review rather than starting other work, and never start a second copy while the first is running.
 
-     The sentence goes in `--append-system-prompt` and not in the prompt, because everything after the slash command becomes that command's arguments. The sandbox blocks `gh` on macOS because Go tools need the system TLS trust service. `sandbox.enableWeakerNetworkIsolation` would open it, but it also opens an exfiltration path, and the reviewer gets everything it needs from `git`.
+     The sentence goes in `--append-system-prompt` and not in the prompt, because everything after the slash command becomes that command's arguments. The sandbox blocks `gh` on macOS because Go tools need the system TLS trust service. `sandbox.enableWeakerNetworkIsolation` would open it, but it also opens an exfiltration path, and the reviewer gets everything it needs from `git`. `--strict-mcp-config` with no `--mcp-config` loads no MCP servers, since MCP tools run outside the sandbox and bypass mode would let a reviewer push, merge or send through them unasked.
 
-     The review is `jq -r .result "$C.json"`. If `jq -r .subtype "$C.json"` is not `success`, the review did not finish: retry once, and if it fails again report it and pick up the next bead, leaving this one claimed. If the PR carries a bead of priority P0, P1, P2 or P3, repeat these bullets for `/pr-review-toolkit:review-pr <n>` with its own clone once the first review is back. A PR whose beads are all P4 stops at `/code-review`.
+     The review is `jq -r .result` of `$C.json`. If its `.subtype` is not `success`, the review did not finish: rebuild the clone with the **Before** block and run it once more, and if that fails too, give up on the review as below. If the PR carries a bead of priority P0, P1, P2 or P3, repeat these bullets for `/pr-review-toolkit:review-pr <n>` with its own clone once the first review is back. A PR whose beads are all P4 stops at `/code-review`.
+   - **After each review.** Run the recorded commands again. If any value differs, [stop early](#stopping-early), naming the checkout and what changed and the clone's path, and leave both as they are. Otherwise remove the clone:
 
-   - **After each review.** Run the recorded commands again. If any value differs, [stop early](#stopping-early), naming the checkout and what changed, and leave that checkout as it is. Otherwise `rm -rf "$C" "$C.json"`. Stay in the bead's worktree until the bead's fixes are pushed.
+     ```bash
+     C="${TMPDIR:-/tmp}/epic-loop/review-<n>-<tag>"
+     rm -rf "${C:?}" "$C.json"
+     ```
+
+     Stay in the bead's worktree until the bead's fixes are pushed.
+   - **Giving up.** A review abandoned after its second failure leaves nothing behind: run the removal block above, then report the failure and pick up the next bead, leaving this one claimed.
 
 6. **Fix or file.** Fix every finding the reviews label Critical, Important or HIGH, and any finding that is a correctness or security defect whatever its label, in one review commit. Re-run checks. Add a "Review round" section to the PR body. File everything else under the findings epic after `bd search` for a duplicate, P3 for behavioural, P4 for style or simplification, with "PR <n> review" in the description. Findings outside the bead's scope are filed, never fixed in this PR.
 
