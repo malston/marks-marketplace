@@ -109,7 +109,7 @@ stub calls runs high. Only calls carrying a slash command are the launcher's.
 | `stubs/gh` | answers the PR protocol plausibly |
 | `sandbox-probe` | checks the review sandbox blocks writes outside its directory |
 | `sandbox-review-probe` | runs a real review in a sandboxed clone |
-| `bg-wait-probe` | checks a `-p` session can wait past the Bash tool's 10-minute cap |
+| `bg-wait-probe` | checks a `-p` session waiting with Monitor survives a background job past the Bash tool's 10-minute cap |
 
 Results are laid out the way the skill-creator viewer expects, so you can point
 `eval-viewer/generate_review.py` at the output directory and read them in a

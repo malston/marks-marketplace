@@ -112,7 +112,7 @@ Review findings you don't fix go under a sibling epic, never under `$EPIC`. On t
 
      ```bash
      C="${TMPDIR:-/tmp}/epic-loop/review-<n>-<tag>"
-     rm -rf "$C" "$C.json"
+     rm -rf "$C" "$C.json" "$C.done"
      git clone -q --shared "$ROOT" "$C" &&
      git -C "$C" remote set-url origin "$(git -C "$ROOT" remote get-url origin)" &&
      git -C "$C" fetch -q origin main <branch> &&
@@ -131,10 +131,17 @@ Review findings you don't fix go under a sibling epic, never under `$EPIC`. On t
          --disallowedTools "Edit,Write,NotebookEdit" \
          --append-system-prompt "PR <n> is checked out as HEAD and main is its base. Use git, not gh: gh cannot reach GitHub from this sandbox." \
          --permission-mode bypassPermissions \
-         --max-budget-usd <REVIEW_BUDGET> --output-format json </dev/null >"$C.json")
+         --max-budget-usd <REVIEW_BUDGET> --output-format json </dev/null >"$C.json"); echo $? >"${C:?}.done"
      ```
 
-     Start it with `run_in_background`, because a review can outlast the Bash tool's 10-minute cap. A turn can end while it runs, and the session is prompted again when the job exits; until then, keep waiting for this review rather than starting other work, and never start a second copy while the first is running.
+     Start it with `run_in_background`, because a review can outlast the Bash tool's 10-minute cap. Then, before the turn ends, wait on it with the Monitor tool (load it with ToolSearch if it is deferred), using the longest timeout it allows:
+
+     ```bash
+     C="${TMPDIR:-/tmp}/epic-loop/review-<n>-<tag>"
+     until [ -e "$C.done" ]; do sleep 10; done; echo "review done: exit $(cat "$C.done")"
+     ```
+
+     If the monitor expires before the review is done, arm it again. Never end a turn with only the background job running: a `claude -p` session exits when a turn ends unless a monitor is still running, and the review dies with it. Never start a second copy while the first is running.
 
      The sentence goes in `--append-system-prompt` and not in the prompt, because everything after the slash command becomes that command's arguments. The sandbox blocks `gh` on macOS because Go tools need the system TLS trust service. `sandbox.enableWeakerNetworkIsolation` would open it, but it also opens an exfiltration path, and the reviewer gets everything it needs from `git`. `--strict-mcp-config` with no `--mcp-config` loads no MCP servers, since MCP tools run outside the sandbox and bypass mode would let a reviewer push, merge or send through them unasked.
 
@@ -143,7 +150,7 @@ Review findings you don't fix go under a sibling epic, never under `$EPIC`. On t
 
      ```bash
      C="${TMPDIR:-/tmp}/epic-loop/review-<n>-<tag>"
-     rm -rf "${C:?}" "$C.json"
+     rm -rf "${C:?}" "$C.json" "$C.done"
      ```
 
      Stay in the bead's worktree until the bead's fixes are pushed.

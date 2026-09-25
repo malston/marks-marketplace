@@ -149,8 +149,14 @@ clone before the review starts, and `--append-system-prompt` tells the
 reviewer to use `git`.
 
 A review can outlast the Bash tool's 10-minute cap, so the worker starts it
-with `run_in_background` and waits for the completion notice. A `-p` session
-stays alive while a background job runs and is re-prompted when it exits.
+with `run_in_background` and waits on a marker file with the Monitor tool. The
+Monitor is what keeps the run alive: a `claude -p` session exits when a turn
+ends unless a monitor is still running, and it kills its background jobs as it
+goes. The first run of the new step 5 ended its turn to wait for the review's
+completion notice, and the review died 30 seconds in with an empty result.
+`evals/bg-wait-probe` shows both: `WAIT=endturn` fails every time, the default
+Monitor wait passes, under the driver's own conditions (text output, `/goal`
+armed, resumed session, user settings loaded).
 
 `evals/sandbox-probe`, `evals/sandbox-review-probe` and `evals/bg-wait-probe`
 re-run those tests. Each calls the real `claude` and spends real money, from
