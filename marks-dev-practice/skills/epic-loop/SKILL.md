@@ -1,6 +1,6 @@
 ---
 name: epic-loop
-description: Work every open child of a beads epic unattended. Type /epic-loop EPIC-ID in any Claude Code session that has bd, gh, git and claude available. It checks the epic, starts the run in the background, and hands back a log path and a resume command. Nothing to install first and no setup to understand. The run gives each bead its own worktree, branch and PR, writes a failing test first with the guard mutated to prove it bites, reviews in a fresh context, fixes serious findings and files the rest to a sibling findings epic, then merges the PR (or holds it for approval with --hold) and closes the bead before the next one starts. Design and keep-or-delete questions get a recommendation and a `human` tag instead of a decision. Takes --hold, --repo DIR, --review-budget USD and --dry-run. Not for a single bead, an epic with no children, or work that needs a human decision at every step.
+description: Work every open child of a beads epic unattended. Type /epic-loop EPIC-ID in any Claude Code session that has bd, gh, git and claude available. It checks the epic, starts the run detached, and hands back a log path and a resume command. Nothing to install first and no setup to understand. The run gives each bead its own worktree, branch and PR, writes a failing test first with the guard mutated to prove it bites, reviews in a fresh context, fixes serious findings and files the rest to a sibling findings epic, then merges the PR (or holds it for approval with --hold) and closes the bead before the next one starts. Design and keep-or-delete questions get a recommendation and a `human` tag instead of a decision. Takes --hold, --repo DIR, --review-budget USD and --dry-run. Not for a single bead, an epic with no children, or work that needs a human decision at every step.
 argument-hint: <epic-id> [--hold] [--repo DIR] [--review-budget USD] [--dry-run]
 compatibility: >-
   Needs the beads issue tracker (bd) and a repository whose work is tracked as
@@ -24,7 +24,7 @@ The distinction matters because the two jobs look alike and the failure is expen
 
 ## Starting a run
 
-The whole job is to check the epic, launch the driver in the background, and report where it went. Four steps, no questions.
+The whole job is to check the epic, launch the driver detached, and report where it went. Four steps, no questions.
 
 1. **Find the driver.** It is `scripts/epic-loop` under this skill's base directory, named at the top of this invocation. Use that absolute path. `epic-loop` on `PATH` is the same file when it is there, but do not depend on it.
 
@@ -44,24 +44,34 @@ The whole job is to check the epic, launch the driver in the background, and rep
 
    If the user passed `--dry-run` themselves, this step is the whole job. Show them the plan, say nothing was spent, and stop.
 
-3. **Launch it.** Start the driver **in the background** with the user's flags. Background matters: the run outlives your turn, and a foreground call would tie up the session for hours and die with it.
+3. **Launch it, detached.** Start the driver under `nohup` with the user's flags, in one ordinary Bash call that returns within seconds. Detached matters: the run outlives your turn and this session. A background job of this session would die with it, and a `claude -p` session exits, killing its background jobs, as soon as its turn ends.
 
    ```bash
-   "$DRIVER" <bead> [their other flags]
+   OUT="$(mktemp "${TMPDIR:-/tmp}/epic-loop-launch.XXXXXX")"
+   nohup "$DRIVER" <bead> [their other flags] </dev/null >"$OUT" 2>&1 &
+   PID=$!
+   for _ in $(seq 60); do
+       grep -q '^working epic:' "$OUT" && break
+       kill -0 "$PID" 2>/dev/null || break
+       sleep 1
+   done
+   cat "$OUT"
    ```
 
-4. **Report and stop.** The driver prints the repo, bead, mode, session, budget and log path before its first `claude` call, so give it a couple of seconds and read the background job's output back. If those lines are an error instead, the run did not start: pass the error on and stop. Otherwise say plainly which mode it is in, because merge mode merges PRs into `main` without asking again:
+   The loop waits until the driver prints `working epic:`, which it does only after the goal-arming call succeeded, or until the driver exits early. Waiting for the banner alone is not enough: the driver prints it before the arming call, and an auth or credit failure only shows up after.
+
+4. **Report and stop.** If the output ends in an error, or has no `working epic:` line, the run did not start: pass the error on and stop. Otherwise report it from the driver's banner, like this, and say plainly which mode it is in, because merge mode merges PRs into `main` without asking again:
 
    ```text
    coderay-q2r -- epic, 7 children needing work
    repo:    ~/code/coderay
    mode:    merge (each PR lands on main once its review passes)
-   budget:  $200, stops at 20 epic turns
+   budget:  $200, plus $10 per review; stops at 20 epic turns
    log:     ~/.local/state/epic-loop/20260912T220114Z-coderay-q2r.log
    resume:  claude --resume 3f2a...
    ```
 
-   Then stop. Do not work beads yourself, and do not poll the log. The run is a separate session; you will be told when it exits.
+   Then stop. Do not work beads yourself, and do not poll the log. The run is detached, so this session is not told when it exits: say that the log's last line reads `finished:` with the exit status once the run is over, and that closing this session does not stop it.
 
 If the driver is missing, unrunnable, or you cannot establish which repository is meant, say so and stop. Never fall back to working the beads in this session: this session has no `/goal` driving it, no turn budget, and it will stop after the first bead with the epic half finished.
 
