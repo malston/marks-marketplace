@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -u
 : "${STUB_RECORD:=/tmp/epic-loop-stub-record.txt}"
+# The driver's version gate reads this before any call; answer with the floor
+# it requires so the gate passes.
+if [[ "${1:-}" == --version ]]; then
+    printf '2.1.272 (Claude Code)\n'
+    exit 0
+fi
 {
   printf -- '--- stub call ---\n'
   for a in "$@"; do printf '  arg: %s\n' "$a"; done
