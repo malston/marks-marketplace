@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+#
+# sandbox-review-probe -- can /code-review run as its own `claude -p` process
+# inside a sandboxed throwaway clone, and does it leave the real checkout alone?
+#
+# Clones REPO with --shared into ~/.cache/sandbox-review-probe/clone, runs
+# REVIEW PR there (REVIEW defaults to "/code-review medium") under
+# bypassPermissions with the strict sandbox (no unsandboxed retry, fail if the
+# sandbox can't start) and edit tools denied, then compares REPO's HEAD, branch, status and branch list
+# before and after. Loads user settings, the same as an epic-loop run does.
+#
+#   sandbox-review-probe REPO PR [BUDGET_USD] [REVIEW]
+#   sandbox-review-probe ~/code/marks-marketplace 1
+#   sandbox-review-probe ~/code/marks-marketplace 1 5 /pr-review-toolkit:review-pr
+
+set -uo pipefail
+
+[[ $# -lt 2 || "$1" == "-h" || "$1" == "--help" ]] && { sed -n 3,14p "$0"; exit 2; }
+REPO="$(cd "$1" && pwd)" || exit 2
+PR="$2"
+BUDGET="${3:-3.00}"
+REVIEW="${4:-/code-review medium}"
+
+WORK="$HOME/.cache/sandbox-review-probe"
+CLONE="$WORK/clone"
+rm -rf "$WORK"
+mkdir -p "$WORK"
+git clone -q --shared "$REPO" "$CLONE" || exit 1
+git -C "$CLONE" remote set-url origin "$(git -C "$REPO" remote get-url origin)"
+
+snapshot() {
+    git -C "$REPO" rev-parse HEAD
+    git -C "$REPO" symbolic-ref -q --short HEAD || echo '(detached)'
+    git -C "$REPO" status --porcelain
+    git -C "$REPO" branch --format='%(refname:short)'
+}
+snapshot >"$WORK/before.txt"
+
+SETTINGS='{"sandbox":{"enabled":true,"allowUnsandboxedCommands":false,"failIfUnavailable":true}}'
+( cd "$CLONE" && env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN \
+    claude -p "$REVIEW $PR" \
+        --settings "$SETTINGS" \
+        --disallowedTools "Edit,Write,NotebookEdit" \
+        --permission-mode bypassPermissions \
+        --max-budget-usd "$BUDGET" --max-turns 60 \
+        --output-format stream-json --verbose \
+        <&- >"$WORK/review.jsonl" 2>"$WORK/review.err" )
+printf 'claude exit=%s\n' "$?"
+
+snapshot >"$WORK/after.txt"
+if diff -u "$WORK/before.txt" "$WORK/after.txt" >"$WORK/checkout.diff"; then
+    printf 'real checkout: unchanged\n'
+else
+    printf 'real checkout: CHANGED\n'; cat "$WORK/checkout.diff"
+fi
+
+J="$WORK/review.jsonl"
+printf '\nresult: %s\n' "$(jq -c 'select(.type=="result") | {subtype, is_error, num_turns, cost: .total_cost_usd}' "$J")"
+printf 'tool calls: %s\n' "$(jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use") | .name' "$J" | sort | uniq -c | tr -s ' \n' ' ')"
+printf 'disableSandbox attempts: %s\n' "$(jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use") | select(.input.dangerouslyDisableSandbox == true) | .input.command' "$J" | wc -l | tr -d ' ')"
+
+printf '\nfailed tool results (first 8):\n'
+jq -r 'select(.type=="user") | .message.content[]? | select(.type=="tool_result" and .is_error == true)
+       | (.content | tostring | gsub("\\s+"; " ") | .[0:220])' "$J" | head -8
+
+SID="$(jq -r 'select(.type=="system" and .subtype=="init") | .session_id' "$J" | head -1)"
+SUBS=("$HOME"/.claude/projects/*sandbox-review-probe-clone/"$SID"/subagents/*.jsonl)
+printf '\nsubagent transcripts: %s\n' "$(ls "${SUBS[@]}" 2>/dev/null | wc -l | tr -d ' ')"
+printf 'subagent Bash calls (all):\n'
+for f in "${SUBS[@]}"; do [[ -f "$f" ]] || continue
+    jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use" and .name=="Bash")
+           | "  \(.input.command | gsub("\\s+"; " ") | .[0:140])  dis=\(.input.dangerouslyDisableSandbox // false)"' "$f"
+done
+printf 'subagent failed tool results:\n'
+for f in "${SUBS[@]}"; do [[ -f "$f" ]] || continue
+    jq -r 'select(.type=="user") | .message.content[]? | select(.type=="tool_result" and .is_error == true)
+           | "  " + (.content | tostring | gsub("\\s+"; " ") | .[0:220])' "$f"
+done
+
+printf '\nreview text (first 40 lines):\n'
+jq -r 'select(.type=="result") | .result // ""' "$J" | head -40
+[[ -s "$WORK/review.err" ]] && { printf '\nstderr:\n'; head -5 "$WORK/review.err"; }
+printf '\nwork dir: %s\n' "$WORK"

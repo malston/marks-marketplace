@@ -97,6 +97,49 @@ calls. Set `EPIC_LOOP_KEEP_API_KEY=1` when that account is the one you mean to
 spend. **Typing the calls by hand carries the same risk**, so prefix them with
 `env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN`.
 
+## The review process
+
+Step 5 of the skill runs each review as its own `claude -p` process, started
+inside a throwaway `--shared` clone under `${TMPDIR:-/tmp}/epic-loop/`. A
+review agent dispatched from the worker used to inherit the worker's working
+directory, which drifts back to the main checkout on its own, and
+`/code-review` checked out a PR branch there. A process started in a clone has
+no directory to drift from, and a checkout inside the clone moves only the
+clone.
+
+Each flag on that call closes a gap that a test on Claude Code 2.1.281 (macOS)
+showed was open:
+
+- `sandbox.enabled`: Bash commands can write only inside the clone. It holds
+  under `--permission-mode bypassPermissions`, and it covers subagents the
+  reviewer starts.
+- `sandbox.allowUnsandboxedCommands: false`: without it, a command that fails
+  in the sandbox can be retried with `dangerouslyDisableSandbox`, and under
+  bypass mode that retry runs unsandboxed with nothing asking first.
+- `sandbox.failIfUnavailable: true`: a sandbox that cannot start otherwise
+  falls back to running commands unsandboxed, with only a warning.
+- `--disallowedTools "Edit,Write,NotebookEdit"`: the sandbox covers Bash only.
+- `--max-budget-usd`: a separate process is outside the driver's
+  `--max-budget-usd`, which covers the worker and its subagents only.
+
+Command-line `--settings` outrank user, project and local settings, so a
+user-level `allowUnsandboxedCommands: true` does not reopen the retry.
+
+The sandbox blocks `gh` on macOS: Go tools need the system TLS trust service
+(`com.apple.trustd.agent`), and `gh` fails with `x509: OSStatus -26276`.
+`sandbox.enableWeakerNetworkIsolation` would open it, along with an
+exfiltration path, so it stays off. The worker fetches the PR branch into the
+clone before the review starts, and `--append-system-prompt` tells the
+reviewer to use `git`.
+
+A review can outlast the Bash tool's 10-minute cap, so the worker starts it
+with `run_in_background` and waits for the completion notice. A `-p` session
+stays alive while a background job runs and is re-prompted when it exits.
+
+`evals/sandbox-probe`, `evals/sandbox-review-probe` and `evals/bg-wait-probe`
+re-run those tests. Each spends real money, from about $0.30 to $1.50 an arm;
+run them after a Claude Code upgrade or before changing a flag.
+
 ## The driver
 
 `scripts/epic-loop` assembles both calls. Run it from anywhere; the target repo

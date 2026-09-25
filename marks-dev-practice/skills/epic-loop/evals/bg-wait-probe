@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+#
+# bg-wait-probe -- can a `claude -p` session under bypassPermissions start a
+# Bash job that outlives the Bash tool's 10-minute cap, wait for it, and read
+# its output before the session exits?
+#
+# The job sleeps SECONDS (default 660, past the 600 s cap) and then writes a
+# marker file. Pass: the session's final answer quotes the marker and the
+# marker existed before claude exited. Takes as long as SECONDS plus a bit.
+#
+#   bg-wait-probe [SECONDS]
+
+set -uo pipefail
+
+[[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { sed -n 3,11p "$0"; exit 0; }
+SECS="${1:-660}"
+
+WORK="$HOME/.cache/bg-wait-probe"
+rm -rf "$WORK"
+mkdir -p "$WORK"
+MARK="$WORK/marker.txt"
+
+PROMPT="Start this exact command with the Bash tool, run in the background (run_in_background true):
+sleep $SECS && echo finished-\$(date +%s) > $MARK
+Then wait until it has finished. Do not start a second copy and do not kill it. When it is done, run: cat $MARK
+and report that output verbatim as your final answer."
+
+start=$(date +%s)
+( cd "$WORK" && env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN \
+    claude -p "$PROMPT" \
+        --setting-sources local \
+        --permission-mode bypassPermissions \
+        --max-budget-usd 2.00 --max-turns 30 \
+        --output-format stream-json --verbose \
+        <&- >"$WORK/run.jsonl" 2>"$WORK/run.err" )
+rc=$?
+end=$(date +%s)
+marker_at_exit="$(cat "$MARK" 2>/dev/null || echo '(no marker)')"
+
+printf 'claude exit=%s after %ss (job sleeps %ss)\n' "$rc" "$((end - start))" "$SECS"
+printf 'marker when claude exited: %s\n' "$marker_at_exit"
+printf 'result: %s\n' "$(jq -c 'select(.type=="result") | {subtype, num_turns, cost: .total_cost_usd, result: (.result // "" | .[0:200])}' "$WORK/run.jsonl")"
+printf 'tool calls:\n'
+jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use")
+       | "  \(.name): \((.input.command // .input.description // "") | tostring | .[0:120]) bg=\(.input.run_in_background // false)"' "$WORK/run.jsonl"
+sleep 5
+printf 'marker 5s later: %s\n' "$(cat "$MARK" 2>/dev/null || echo '(no marker)')"
+printf 'work dir: %s\n' "$WORK"
