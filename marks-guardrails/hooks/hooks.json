@@ -6,11 +6,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/log-bash-commands.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/log-bash-commands.sh\""
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/block-dangerous-commands.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/block-dangerous-commands.sh\""
           }
         ]
       },
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/protect-sensitive-files.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/protect-sensitive-files.sh\""
           }
         ]
       }
@@ -30,11 +30,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/format-on-save.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/format-on-save.sh\""
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/markdown_formatter.py"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/markdown_formatter.py\""
           }
         ]
       }
