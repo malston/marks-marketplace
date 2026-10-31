@@ -19,6 +19,13 @@ After writing the file, report the saved path.
 
 ## Handoff Template
 
+### Prompt
+
+1. Goal. What you're trying to do, and why.
+2. Context. Who it's for, what you already know or tried, and any files or links. Claude can't read your mind or your inbox.
+3. What good looks like. Format, length, tone. Paste an example if you have one.
+4. Constraints. What to avoid, and what must be true.
+
 ### Progress Summary
 
 [Completed tasks]
