@@ -45,6 +45,8 @@ FEATURES:
     - Detects unlabeled code fences and adds language tags (python, javascript, bash, json, sql, text)
     - Reduces excessive blank lines (3+ newlines → 2 newlines)
     - Only processes .md and .mdx files
+    - Skips files under a directory that holds a .no-markdown-format file, for repos
+      where untagged fences mean something (for example, prompts to paste)
     - Preserves code content exactly
 
 EXIT CODES:
@@ -107,6 +109,17 @@ def format_markdown(text):
 
     return formatted_content.rstrip() + '\n'
 
+def opted_out(file_path):
+    """True when the file's directory or one of its parents holds a .no-markdown-format file."""
+    directory = os.path.dirname(os.path.abspath(file_path))
+    while True:
+        if os.path.exists(os.path.join(directory, '.no-markdown-format')):
+            return True
+        parent = os.path.dirname(directory)
+        if parent == directory:
+            return False
+        directory = parent
+
 # Main execution
 try:
     input_data = json.load(sys.stdin)
@@ -114,6 +127,9 @@ try:
 
     if not file_path.endswith(('.md', '.mdx')):
         sys.exit(0)  # Not a markdown file
+
+    if opted_out(file_path):
+        sys.exit(0)  # The repo asked not to be formatted
 
     if os.path.exists(file_path):
         with open(file_path, 'r', encoding='utf-8') as f:
