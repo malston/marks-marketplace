@@ -184,6 +184,21 @@
         "name": "lackeyjb"
       },
       "license": "MIT"
+    },
+    {
+      "name": "agent-integration-skills",
+      "source": {
+        "source": "github",
+        "repo": "malston/agent-integration-skills"
+      },
+      "description": "Skills for reviewing agent integrations and writing pattern selection cards.",
+      "author": {
+        "name": "Mark Alston"
+      },
+      "skills": [
+        "./reviewing-agent-integration",
+        "./writing-pattern-selection-cards"
+      ]
     }
   ]
 }
