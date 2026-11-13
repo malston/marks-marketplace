@@ -12,7 +12,7 @@ The command accepts: `/update-memory [scope] <content>`
 - `scope` (optional): `user`, `project`, or `local`
   - `user` → `~/.claude/CLAUDE.md` (global, applies to all projects)
   - `project` → `.claude/CLAUDE.md` (project-specific, checked into git)
-  - `local` → `.claude/CLAUDE.local.md` (local only, gitignored)
+  - `local` → `CLAUDE.local.md` in the project root (local only, gitignored)
 - `content`: The memory/instruction to add
 
 ## Step 1: Parse Arguments

@@ -6,9 +6,8 @@ description: >
   prompt engineering, evals, MCP, agents, and workflows. Use this skill whenever the
   user asks about Claude API integration, SDK usage, tool calling, prompt caching,
   extended thinking, embeddings, retrieval, MCP servers/clients, agentic workflows,
-  or any pattern for building production Claude-powered applications. Trigger even for
-  partial mentions like "how do I call Claude from Python", "set up tool use", "build
-  an agent", "implement RAG", "prompt caching", "MCP server", or "streaming responses".
+  or any pattern for building production Claude-powered applications. Trigger even
+  when the question only touches one of these areas.
 ---
 
 # Building with the Claude API
@@ -24,7 +23,7 @@ For deep dives, see the reference files in `references/`.
 |--------|----------|-----------|
 | **Opus** | Complex multi-step reasoning, planning | Higher cost + latency |
 | **Sonnet** | Balanced — coding, editing, most production tasks | Best default choice |
-| **Haiku** | Real-time UX, high-volume processing | No extended reasoning |
+| **Haiku** | Real-time UX, high-volume processing | Least capable on hard reasoning |
 
 **Rule**: Mix models in the same app — e.g. Haiku for dataset generation, Sonnet for production responses, Opus only where deep reasoning matters.
 
@@ -38,7 +37,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from env
-MODEL = "claude-sonnet-4-5"
+MODEL = "claude-opus-5-5"
 
 response = client.messages.create(
     model=MODEL,
@@ -56,7 +55,7 @@ text = response.content[0].text
 - `max_tokens` — hard ceiling on output length (required)
 - `messages` — list of `{role, content}` dicts (required)
 - `system` — system prompt string (optional kwarg)
-- `temperature` — 0–1; 0 = deterministic, ~1 = creative
+- `temperature` / `top_p` / `top_k` — not accepted by current models (400); steer with the prompt and `output_config={"effort": ...}`
 - `stop_sequences` — list of strings that halt generation when hit
 
 ---
@@ -105,14 +104,8 @@ Raw event types: `message_start` → `content_block_start` → `content_block_de
 
 ## 5. Controlling Output
 
-### Pre-filling
-Append an assistant message to steer continuation direction:
-```python
-messages = [
-    {"role": "user", "content": "Compare coffee vs tea."},
-    {"role": "assistant", "content": "Coffee is better because"}
-]
-```
+### Pre-filling (not on current models)
+A trailing assistant message used to steer the continuation. Current Opus, Sonnet, Haiku and Fable models return a 400 for it. Steer with the system prompt, or use structured outputs below.
 
 ### Stop sequences
 ```python
@@ -121,13 +114,20 @@ response = client.messages.create(
 )
 ```
 
-### Clean structured output (pre-fill + stop)
+### Structured output
 ```python
-messages = [
-    {"role": "user", "content": "Return a JSON list of 3 colors."},
-    {"role": "assistant", "content": "```json"}
-]
-response = client.messages.create(..., messages=messages, stop_sequences=["```"])
+from pydantic import BaseModel
+
+class Colors(BaseModel):
+    colors: list[str]
+
+response = client.messages.parse(
+    model=MODEL, max_tokens=1024,
+    messages=[{"role": "user", "content": "Return 3 colors."}],
+    output_format=Colors,
+)
+# Raw schema form on messages.create():
+# output_config={"format": {"type": "json_schema", "schema": Colors.model_json_schema()}}
 ```
 
 ---
@@ -151,7 +151,7 @@ response = client.messages.create(..., messages=messages, stop_sequences=["```"]
 
 ---
 
-## 7. Extended Thinking
+## 7. Thinking
 
 For hard tasks where prompt optimization isn't enough:
 
@@ -159,15 +159,15 @@ For hard tasks where prompt optimization isn't enough:
 response = client.messages.create(
     model=MODEL,
     max_tokens=4096,
-    thinking={"type": "enabled", "budget_tokens": 2048},
+    thinking={"type": "adaptive"},       # Claude decides how much to think
+    output_config={"effort": "high"},    # low | medium | high | xhigh | max
     messages=[...]
 )
-# response.content = [ThinkingBlock(...), TextBlock(...)]
 ```
 
-- Thinking tokens are **billed** — enable only after evals confirm necessity
-- Thinking blocks include a cryptographic signature (tamper-proof)
-- Redacted thinking blocks may appear for safety-flagged content
+- `budget_tokens` is removed on current models (400). Control depth with `effort`; on Opus 5.5 thinking is always on and effort defaults to `medium`.
+- Thinking tokens are **billed** whether or not their text is shown. Set `thinking={"type": "adaptive", "display": "summarized"}` to get a readable summary; the default returns empty thinking text.
+- Pass thinking blocks back unchanged on later turns.
 
 ---
 
@@ -220,23 +220,17 @@ def run_conversation(messages, tools):
 
 ### Built-in tool schemas (you implement execution)
 - **Text editor**: `str_replace_based_edit_tool` (version-dated per model)
-- **Web search**: `{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}`
+- **Web search**: `{"type": "web_search_20260209", "name": "web_search", "max_uses": 5}` (older models: `web_search_20250305`)
 - **Code execution**: server-side Docker container (no network); pairs with Files API
 
-### Force a specific tool
-```python
-response = client.messages.create(
-    ...,
-    tool_choice={"type": "tool", "name": "extract_data"},
-)
-structured_output = response.content[0].input  # already a dict
-```
+### Steer toward a specific tool
+Forced `tool_choice` (`{"type": "any"}` or `{"type": "tool", ...}`) returns a 400 on Opus 5.5 and Sonnet 5.5. Name the tool in the prompt, keep `tool_choice` on `auto`, and set `strict: True` on the tool (its schema needs `additionalProperties: false`) to guarantee valid arguments. For plain extraction, use structured outputs instead.
 
 ---
 
 ## 9. Prompt Caching
 
-Avoids reprocessing identical input. Cache lasts **1 hour**, minimum **1024 tokens**.
+Avoids reprocessing identical input. `{"type": "ephemeral"}` lasts 5 minutes (refreshed on each read); add `"ttl": "1h"` for an hour. The minimum cacheable prefix depends on the model (512–4096 tokens).
 
 ```python
 # Cache system prompt
@@ -363,12 +357,12 @@ See `references/agents-workflows.md` for patterns and decision framework.
 
 | Goal | Pattern |
 |------|---------|
-| Raw JSON output | Pre-fill ` ```json ` + stop sequence ` ``` ` |
-| Force tool | `tool_choice={"type":"tool","name":"..."}` |
+| Raw JSON output | Structured outputs: `client.messages.parse(..., output_format=Model)` |
+| Steer to a tool | Name it in the prompt, `tool_choice` auto, `strict: True` |
 | Reduce cost | Prompt caching with `cache_control` |
 | Large docs | RAG or Files API + code execution |
 | Third-party services | MCP servers |
-| Complex reasoning | Extended thinking |
+| Complex reasoning | Adaptive thinking + `effort` |
 | Better UX on long responses | `client.messages.stream()` |
 | Constraint-heavy prompts | Chaining workflow (generate → fix violations) |
 

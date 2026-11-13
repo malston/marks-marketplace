@@ -1,5 +1,9 @@
 # The AntiSlop
 
+[![Oathe Security](https://img.shields.io/endpoint?url=https%3A%2F%2Faudit-engine.oathe.ai%2Fapi%2Fbadge%2Faplaceforallmystuff%2Fthe-antislop&style=for-the-badge&logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAyNCAyNCcgZmlsbD0nd2hpdGUnPjxwYXRoIGQ9J00xMiAyQzkuMjQgMiA3IDQuMjQgNyA3djNINmMtMS4xIDAtMiAuOS0yIDJ2OGMwIDEuMS45IDIgMiAyaDEyYzEuMSAwIDItLjkgMi0ydi04YzAtMS4xLS45LTItMi0yaC0xVjdjMC0yLjc2LTIuMjQtNS01LTV6bTMgMTBIOVY3YzAtMS42NiAxLjM0LTMgMy0zczMgMS4zNCAzIDN2M3onLz48L3N2Zz4=&labelColor=000000&cacheSeconds=3600)](https://oathe.ai/report/aplaceforallmystuff/the-antislop)
+[![Claude Code](https://img.shields.io/badge/Claude_Code-Skill-blue?style=flat-square)](https://claude.ai)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+
 ![Architecture](docs/images/architecture-diagram.png)
 
 A Claude Code skill that detects and **fixes** AI-generated writing patterns. More comprehensive than detection alone — it actually rewrites the problems.
@@ -14,6 +18,14 @@ AI-generated text has tells. Wikipedia's [Signs of AI Writing](https://en.wikipe
 4. **Catches structural tells** — Staccato fragments, manufactured personality, uniformity
 
 ## Installation
+
+### Option 1: Skills CLI
+
+```bash
+npx skills add aplaceforallmystuff/the-antislop
+```
+
+### Option 2: Clone to skills directory
 
 ```bash
 mkdir -p ~/.claude/skills
@@ -103,6 +115,14 @@ Request "audit only" if you just want detection without edits.
 ## Further Reading
 
 For more on AI writing patterns and maintaining your authentic voice, see the [AI Writing Field Guide](https://go.signalovernoise.at/products/the-ai-writing-field-guide).
+
+## Related Skills
+
+Part of the [aplaceforallmystuff](https://skills.sh/aplaceforallmystuff) skills collection:
+
+- **[voice-editor](https://github.com/aplaceforallmystuff/claude-voice-editor)** — 6-pass editing to match your voice profile
+- **[voice-analyzer](https://github.com/aplaceforallmystuff/claude-voice-analyzer)** — Create the VOICE.md that personalizes detection
+- **[slop-detector](https://github.com/aplaceforallmystuff/claude-slop-detector)** — Lightweight detection-only variant
 
 ## Credits
 
