@@ -27,7 +27,7 @@
       "name": "marks-git-workflow",
       "source": "./marks-git-workflow",
       "description": "Git and review workflow plus the investigation-scratchpad skill and its enforcement hook.",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "author": {
         "name": "Mark Alston"
       }
@@ -36,7 +36,7 @@
       "name": "marks-writing",
       "source": "./marks-writing",
       "description": "Writing quality: detect and fix AI-generated slop patterns.",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "author": {
         "name": "Mark Alston"
       }
@@ -72,7 +72,7 @@
       "name": "marks-ai-eng",
       "source": "./marks-ai-eng",
       "description": "AI engineering helpers: Claude API building reference, prompt lookup, and an official-docs consultant.",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "author": {
         "name": "Mark Alston"
       }
