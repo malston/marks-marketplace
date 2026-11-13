@@ -90,7 +90,8 @@
       "name": "screenshot",
       "source": {
         "source": "github",
-        "repo": "fltman/claude-code-skill-screenshot"
+        "repo": "fltman/claude-code-skill-screenshot",
+        "sha": "870cfbc75c576f3a64e26acab6d20a0c60636543"
       },
       "description": "Take screenshots from Claude Code. Upstream: github.com/fltman/claude-code-skill-screenshot.",
       "author": {
@@ -102,7 +103,8 @@
       "name": "book-to-skill",
       "source": {
         "source": "github",
-        "repo": "virgiliojr94/book-to-skill"
+        "repo": "virgiliojr94/book-to-skill",
+        "sha": "e7bb659d3261491c8b28793dcb9102fa64a46c22"
       },
       "description": "Turn a book into a Claude skill. Upstream: github.com/virgiliojr94/book-to-skill.",
       "author": {
@@ -115,7 +117,8 @@
       "source": {
         "source": "git-subdir",
         "url": "vercel-labs/agent-skills",
-        "path": "skills/web-design-guidelines"
+        "path": "skills/web-design-guidelines",
+        "sha": "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62"
       },
       "description": "Vercel's web design guidelines skill. Upstream: github.com/vercel-labs/agent-skills.",
       "author": {
@@ -128,11 +131,26 @@
       "source": {
         "source": "git-subdir",
         "url": "vercel-labs/agent-skills",
-        "path": "skills/react-best-practices"
+        "path": "skills/react-best-practices",
+        "sha": "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62"
       },
       "description": "Vercel's React best-practices skill. Upstream: github.com/vercel-labs/agent-skills.",
       "author": {
         "name": "Vercel"
+      },
+      "license": "MIT"
+    },
+    {
+      "name": "avoid-ai-writing",
+      "source": {
+        "source": "git-subdir",
+        "url": "conorbronsdon/avoid-ai-writing",
+        "path": "plugins/avoid-ai-writing",
+        "sha": "a04645a5d915d83ad1741a92d989dfc4bc6f1867"
+      },
+      "description": "Audit and rewrite content to remove AI writing patterns. Upstream: github.com/conorbronsdon/avoid-ai-writing.",
+      "author": {
+        "name": "Conor Bronsdon"
       },
       "license": "MIT"
     }
