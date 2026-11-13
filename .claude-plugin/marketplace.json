@@ -85,6 +85,56 @@
       "author": {
         "name": "Mark Alston"
       }
+    },
+    {
+      "name": "screenshot",
+      "source": {
+        "source": "github",
+        "repo": "fltman/claude-code-skill-screenshot"
+      },
+      "description": "Take screenshots from Claude Code. Upstream: github.com/fltman/claude-code-skill-screenshot.",
+      "author": {
+        "name": "Anders Bjarby"
+      },
+      "license": "MIT"
+    },
+    {
+      "name": "book-to-skill",
+      "source": {
+        "source": "github",
+        "repo": "virgiliojr94/book-to-skill"
+      },
+      "description": "Turn a book into a Claude skill. Upstream: github.com/virgiliojr94/book-to-skill.",
+      "author": {
+        "name": "virgiliojr94"
+      },
+      "license": "MIT"
+    },
+    {
+      "name": "web-design-guidelines",
+      "source": {
+        "source": "git-subdir",
+        "url": "vercel-labs/agent-skills",
+        "path": "skills/web-design-guidelines"
+      },
+      "description": "Vercel's web design guidelines skill. Upstream: github.com/vercel-labs/agent-skills.",
+      "author": {
+        "name": "Vercel"
+      },
+      "license": "MIT"
+    },
+    {
+      "name": "vercel-react-best-practices",
+      "source": {
+        "source": "git-subdir",
+        "url": "vercel-labs/agent-skills",
+        "path": "skills/react-best-practices"
+      },
+      "description": "Vercel's React best-practices skill. Upstream: github.com/vercel-labs/agent-skills.",
+      "author": {
+        "name": "Vercel"
+      },
+      "license": "MIT"
     }
   ]
 }
