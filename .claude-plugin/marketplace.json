@@ -9,7 +9,7 @@
       "name": "marks-languages",
       "source": "./marks-languages",
       "description": "Per-language coding standards and idioms: bash, Go, Python, Rust, TypeScript.",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "author": {
         "name": "Mark Alston"
       }
@@ -18,7 +18,7 @@
       "name": "marks-dev-practice",
       "source": "./marks-dev-practice",
       "description": "Engineering practice: clean architecture, TDD, PR-driven TDD, unattended epic loops, subagent context scoping, code explanation.",
-      "version": "0.9.1",
+      "version": "0.9.2",
       "author": {
         "name": "Mark Alston"
       }
@@ -36,7 +36,7 @@
       "name": "marks-writing",
       "source": "./marks-writing",
       "description": "Writing quality: detect and fix AI-generated slop patterns.",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "author": {
         "name": "Mark Alston"
       }
@@ -72,7 +72,7 @@
       "name": "marks-ai-eng",
       "source": "./marks-ai-eng",
       "description": "AI engineering helpers: Claude API building reference, prompt lookup, and an official-docs consultant.",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "author": {
         "name": "Mark Alston"
       }
@@ -151,6 +151,37 @@
       "description": "Audit and rewrite content to remove AI writing patterns. Upstream: github.com/conorbronsdon/avoid-ai-writing.",
       "author": {
         "name": "Conor Bronsdon"
+      },
+      "license": "MIT"
+    },
+    {
+      "name": "marks-gws",
+      "source": "./marks-gws",
+      "description": "Google Workspace skills for the gws CLI: Gmail, Calendar, Drive, Docs, Sheets, Slides, Chat, Meet, Tasks and workflows.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Mark Alston"
+      }
+    },
+    {
+      "name": "marks-output-styles",
+      "source": "./marks-output-styles",
+      "description": "Output styles for Claude Code, from plain STE to novelty voices.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Mark Alston"
+      }
+    },
+    {
+      "name": "playwright-skill",
+      "source": {
+        "source": "github",
+        "repo": "lackeyjb/playwright-skill",
+        "sha": "dd47a6a023e249eb1b36e9e943eab89d0900865d"
+      },
+      "description": "Browser automation with Playwright. Upstream: github.com/lackeyjb/playwright-skill.",
+      "author": {
+        "name": "lackeyjb"
       },
       "license": "MIT"
     }

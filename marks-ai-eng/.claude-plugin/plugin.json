@@ -1,6 +1,6 @@
 {
   "name": "marks-ai-eng",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "AI engineering helpers: Claude API building reference, prompt lookup, and an official-docs consultant.",
   "author": {
     "name": "Mark Alston"

@@ -1,0 +1,9 @@
+# Local virtualenv created by `uv venv` (see Installation in SKILL.md)
+.venv/
+
+# Editable-install and bytecode artifacts
+*.egg-info/
+__pycache__/
+
+# Session scratch state, not portable
+.remember/

@@ -1,0 +1,8 @@
+{
+  "name": "marks-output-styles",
+  "version": "0.1.0",
+  "description": "Output styles for Claude Code, from plain STE to novelty voices.",
+  "author": {
+    "name": "Mark Alston"
+  }
+}

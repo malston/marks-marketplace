@@ -1,0 +1,8 @@
+{
+  "name": "marks-gws",
+  "version": "0.1.0",
+  "description": "Google Workspace skills for the gws CLI: Gmail, Calendar, Drive, Docs, Sheets, Slides, Chat, Meet, Tasks and workflows.",
+  "author": {
+    "name": "Mark Alston"
+  }
+}

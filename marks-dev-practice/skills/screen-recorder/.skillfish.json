@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "name": "screen-recorder",
+  "owner": "smykla-skalski",
+  "repo": "research",
+  "path": "claude-code/skills/screen-recorder",
+  "branch": "main",
+  "sha": "204927186a314466a7166515429b72a0ed6c1286",
+  "source": "manual"
+}
