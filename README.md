@@ -29,5 +29,5 @@ Note: `claude plugin update <plugin>` may report "Plugin not found" -- use unins
 - **marks-guardrails** — safety/format hooks: block-dangerous-commands, protect-sensitive-files, format-on-save, log-bash-commands, markdown_formatter
 - **marks-iterm** — iTerm2 session-save command + bin script (macOS + iTerm2 Python API required)
 - **marks-vsphere** — vsphere-architect skill + vSphere design commands
-- **marks-ai-eng** — AI engineering helpers: llm-api-builder, prompt-lookup, claude-docs-consultant
+- **marks-ai-eng** — AI engineering helpers: be-ambitious, conclave, prompt-lookup, claude-docs-consultant
 - **beads-pm** — product-manager side of a beads backlog: plan-to-beads, backlog-audit, backlog-groom skills; backlog-filer and backlog-auditor agents
