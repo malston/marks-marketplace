@@ -11,9 +11,13 @@ Everything here is about judgement. `conclave --help` and `/help` inside the con
 
 ## Starting a run
 
+```text
+mkfifo ctl; tail -f /dev/null > ctl &   # hold the write end open
+conclave session "<goal>" --implementers "claude, claude" --operator agent < ctl &
+echo '/continue' > ctl                  # answer a pause: one line, one command
 ```
-conclave session "<goal>" --implementers "claude, claude"
-```
+
+Keep stdin open. A redirect from a file or a pipe from one `echo` closes it, and the session ends at its first pause. The fifo with `tail` holding its write end is what keeps it open. `--operator agent` tells the advisor a machine is answering, so it escalates about premises and ambiguous criteria rather than permission.
 
 `session` keeps a pause open and waits for you. `relay` returns an outcome and ends at the first pause point, so a pause has nowhere to suspend to — **use `session` unless you specifically want a run that cannot be resumed.**
 
@@ -26,7 +30,7 @@ conclave session "<goal>" --implementers "claude, claude"
 A pause is normally the run telling you something went wrong. A **checkpoint** is the other
 direction: you say in advance where the interesting moment is, and the run stops there.
 
-```
+```text
 conclave session "<goal>" --checkpoint "the parser lands and its tests pass"
 /checkpoint the parser lands and its tests pass
 ```
@@ -39,7 +43,7 @@ at the flag.
 
 **Reach for one when the risk is finishing too early, not when something is going wrong.** The
 advisor decides when the work is done, and it decides from what the implementers report. A
-checkpoint is how you say *"before you call this finished, stop and let me see the tree"* — after
+checkpoint is how you say _"before you call this finished, stop and let me see the tree"_ — after
 the schema change lands, before the migration runs, once the parser passes but before it is
 wired up.
 
@@ -74,7 +78,7 @@ that armed none. `state` is the whole reading:
   is still there, so the record keeps saying who judged what
 
 A run that ends with `state: armed` — nothing ever signalled — also says so in its own
-`outcome.detail`: *"the operator's checkpoint was NOT reached"*. A run that ends after a signal
+`outcome.detail`: _"the operator's checkpoint was NOT reached"_. A run that ends after a signal
 makes no such claim, because the milestone did arrive and you chose to stop rather than accept
 it. **So a missing signal is never something you have to notice by its absence**, on any ending:
 `done`, a ceiling, an abort or a teardown.
@@ -86,7 +90,7 @@ log carries what became of the earlier ones.
 
 ## Reading a run without scraping the console
 
-```
+```text
 conclave status --json
 conclave events --follow
 ```
@@ -104,7 +108,7 @@ Two fields, and they are not the same question:
 
 At a pause, **a plain message is the answer** — you do not need a command. The run resumes on it.
 
-```
+```text
 /continue                    resume with nothing further to say
 /continue <text>             resume, and say that
 /continue force              resume even though a child reads mid-turn
@@ -114,7 +118,7 @@ At a pause, **a plain message is the answer** — you do not need a command. The
 
 For a multi-line answer, open a block **on its own line**. A command cannot open one:
 
-```
+```text
 <<EOF
 first line
 
@@ -156,7 +160,7 @@ Only when all three hold is a probe worth sending: `conclave notify tell "probe"
 even-realities --run <id>` at the START of a run is what shows the device is really there. Once
 it has worked, these are the commands:
 
-```
+```bash
 conclave notify tell "<headline>" --transport <name>     say something; expect no answer
 conclave notify ask  "<headline>" --transport <name> --options a:Yes,b:No
                                                          ask, and wait for one of those
@@ -202,7 +206,7 @@ before the question is. Nothing to do on your side; keep the labels short.
 
 If a later instruction touches what a withheld message covered, the run raises an **`authority_conflict`** pause. It stops only the workstream carrying that instruction, and it is yours to answer rather than the advisor's — by construction, since the advisor is the seat the message was kept from.
 
-**The repair the pause is asking for is to hand the withheld message over in full** to the seat that never saw it. Do that and the record moves: the conflict cites that message only against seats it is *still* withheld from. The routing log is unchanged — what happened at the original message still happened — so an audit answers the same historical question it always did.
+**The repair the pause is asking for is to hand the withheld message over in full** to the seat that never saw it. Do that and the record moves: the conflict cites that message only against seats it is _still_ withheld from. The routing log is unchanged — what happened at the original message still happened — so an audit answers the same historical question it always did.
 
 Restrict a message when the reason to restrict it is real. Broadcasting to avoid a pause you can answer trades a decision you made for one you did not.
 
