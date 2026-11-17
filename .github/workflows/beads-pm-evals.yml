@@ -43,6 +43,13 @@ jobs:
       - name: Install sandbox dependencies
         run: sudo apt-get update && sudo apt-get install -y bubblewrap socat
 
+      # Ubuntu's AppArmor blocks the unprivileged user namespaces bubblewrap
+      # needs, so every sandboxed Bash call died with "write
+      # /proc/self/setgroups ... Permission denied". This is the sysctl the
+      # Claude Code sandboxing docs give; the runner is thrown away after the job.
+      - name: Allow unprivileged user namespaces for the sandbox
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code@2.1.326
 
