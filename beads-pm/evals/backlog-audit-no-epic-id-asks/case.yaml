@@ -1,0 +1,29 @@
+schema_version: "1.1"
+name: backlog-audit-no-epic-id-asks
+description: >
+  /backlog-audit with no epic id. A whole-backlog audit is expensive, so the
+  skill should ask whether that was meant instead of starting one.
+tags: [backlog-audit]
+execution:
+  max_turns: 15
+  timeout_seconds: 300
+  allowed_tools: [Read, Glob, Grep, Bash, Skill, Agent]
+  prompt: |
+    /beads-pm:backlog-audit
+context:
+  scaffold_script: scaffold.sh
+graders:
+  - name: does-not-start-full-audit
+    type: tool_used
+    tool: Agent
+    input_match: "backlog-auditor"
+    min: 0
+    max: 0
+  - name: makes-no-backlog-changes
+    type: regex
+    target: trace
+    match: not_contains
+    pattern: '"command":"(?:[^"\\]|\\.)*\bbd (?:-\S+ )*(?:assign|batch|close|comment|create|create-form|defer|delete|duplicate|edit|import|label (?:add|remove)|link|note|priority|promote|purge|prune|reclaim|reopen|restore|set-state|supersede|tag|unclaim|undefer|update|dep (?:add|remove|rm)|cleanup|compact|flatten|gc)\b'
+  - name: asks-whether-full-audit-was-meant
+    type: llm
+    criteria: Pass if the response asks the user whether they meant to audit the whole backlog (or which epic they meant) instead of reporting audit findings.

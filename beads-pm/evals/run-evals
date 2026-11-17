@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# run-evals: run the beads-pm eval suite with claude plugin eval.
+#
+# Usage: evals/run-evals [--login] [--runs N] [--case NAME] [--tag TAG] [-- EXTRA...]
+#
+# Use it before merging a change to a skill or agent, and in CI. It runs every
+# case under evals/ (or the ones you filter to) against this plugin, grades
+# them, and exits non-zero if any case scores below the threshold.
+#
+#   --login       Drop ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN for this run so
+#                 claude uses your logged-in account. Use it locally when a
+#                 stale key is exported in your shell (symptom: every run ends
+#                 "Invalid API key" in under a second).
+#   --runs N      Runs per case (default 1). Raise it to measure flakiness.
+#   --case NAME   Only cases whose name matches this glob (one --case only;
+#                 claude plugin eval keeps just the last one).
+#   --tag TAG     Only cases with this tag (backlog-audit, backlog-groom,
+#                 plan-to-beads).
+#   -- EXTRA...   Passed straight to claude plugin eval (e.g. -- --keep-temp).
+#
+# Environment overrides:
+#   EVAL_MODEL         model under test   (default claude-sonnet-5-5)
+#   EVAL_JUDGE_MODEL   llm grader model   (default sonnet)
+#   EVAL_THRESHOLD     per-case pass bar  (default 1.0: every grader, every run)
+#   EVAL_MAX_COST_USD  hard spend ceiling (default 10)
+#   EVAL_CONCURRENCY   parallel runs      (default 3)
+#
+# Output: one line per case on the console, aggregate-result.json and
+# report.html under evals/results/<timestamp>/ (gitignored). Open the report
+# for each run's transcript and every grader verdict.
+#
+# Needs: claude (>= 2.1.326), bd (1.3.x), git, and on Linux bubblewrap + socat
+# for the Bash sandbox. On macOS the run refuses to start if ~/.ssh holds a
+# symlink; move the link out of ~/.ssh.
+set -Eeuo pipefail
+
+readonly PROG="${0##*/}"
+readonly PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+die() { printf '%s: %s\n' "$PROG" "$*" >&2; exit 2; }
+
+login=0
+runs=1
+filters=()
+case_glob=""
+extra=()
+
+while (($#)); do
+    case "$1" in
+        --login) login=1; shift ;;
+        --runs)  runs="${2:?--runs needs a number}"; shift 2 ;;
+        --case)
+            [[ -z "$case_glob" ]] || die "give --case once; use a glob or --tag for several"
+            case_glob="${2:?--case needs a glob}"; filters+=(--case "$case_glob"); shift 2 ;;
+        --tag)   filters+=(--tag "${2:?--tag needs a tag}"); shift 2 ;;
+        --)      shift; extra=("$@"); break ;;
+        -h|--help)
+            sed -n '2,34p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *) die "unknown option: $1 (see --help)" ;;
+    esac
+done
+
+command -v claude >/dev/null || die "claude not on PATH"
+command -v bd >/dev/null || die "bd not on PATH; the fixtures need it"
+
+if ((login)); then
+    unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN
+fi
+
+# --scaffold: each case's scaffold.sh builds the sample repo (git + bd).
+# --allow-tools Bash: the skills drive bd through Bash; without the grant
+#   the tool is removed and every case fails for the wrong reason.
+# --ablation none: the cases invoke /beads-pm:* directly, so a no-plugin
+#   baseline arm has nothing to run and only doubles the bill.
+exec claude plugin eval "$PLUGIN_DIR" \
+    --trust-plugin \
+    --scaffold \
+    --allow-tools Bash \
+    --ablation none \
+    --no-publish \
+    --runs "$runs" \
+    --concurrency "${EVAL_CONCURRENCY:-3}" \
+    --model "${EVAL_MODEL:-claude-sonnet-5-5}" \
+    --judge-model "${EVAL_JUDGE_MODEL:-sonnet}" \
+    --threshold "${EVAL_THRESHOLD:-1.0}" \
+    --max-cost-usd "${EVAL_MAX_COST_USD:-10}" \
+    ${filters[@]+"${filters[@]}"} \
+    ${extra[@]+"${extra[@]}"}
