@@ -24,9 +24,13 @@ for the command surface.
 attention-bound and a session that runs to forty beads gets rubber-stamped
 somewhere around fifteen.
 
-Go through beads in the order the scope gives you -- oldest first, or an
-epic's own child order -- and do not skip ahead to one that looks more
-interesting, an oversized bead begging to be split, say. The order is a
+Go through beads oldest first, in the order the filer created them, and do not
+skip ahead to one that looks more interesting, an oversized bead begging to be
+split, say. Take the order from
+`bd list --status open --sort created --reverse --flat`, adding
+`--parent EPIC-ID` when scoped to an epic. Other listings order beads
+differently: `bd show` lists an epic's children in no useful order and
+`bd children --json` lists them newest first. The order is a
 promise that nothing gets passed over, and jumping the queue breaks that
 promise for every bead between where you were and where you jumped to.
 

@@ -18,6 +18,26 @@ set -Eeuo pipefail
 readonly HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 kind="${1:?usage: setup-repo.sh backlog|plan}"
 
+# epoch_to_iso SECONDS: GNU date takes -d @N, BSD date takes -r N.
+epoch_to_iso() {
+    date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ
+}
+
+# stamp_ages FILE: print the JSONL with created_at/updated_at set one hour
+# apart in file order, ending an hour ago. Filing order is what "oldest first"
+# means to backlog-groom, so it has to be defined; dating it relative to now
+# keeps the fixture from drifting into "stale" as it ages.
+stamp_ages() {
+    local now n i=0 ts line
+    now="$(date -u +%s)"
+    n="$(wc -l < "$1")"
+    while IFS= read -r line; do
+        ts="$(epoch_to_iso $((now - 3600 * (n - i))))"
+        printf '{"created_at":"%s","updated_at":"%s",%s\n' "$ts" "$ts" "${line#\{}"
+        i=$((i + 1))
+    done < "$1"
+}
+
 git init -q
 git config user.name "beads-pm eval"
 git config user.email "eval@example.invalid"
@@ -30,7 +50,7 @@ bd init --prefix sbx --non-interactive --skip-agents --skip-hooks -q
 bd metrics off >/dev/null
 
 case "$kind" in
-    backlog) bd import "$HERE/sbx-backlog.jsonl" >/dev/null ;;
+    backlog) stamp_ages "$HERE/sbx-backlog.jsonl" | bd import - >/dev/null ;;
     plan)    cp "$HERE/plan.md" plan.md ;;
     *)       echo "setup-repo.sh: unknown kind: $kind" >&2; exit 1 ;;
 esac
