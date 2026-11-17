@@ -1,0 +1,31 @@
+schema_version: "1.1"
+name: backlog-groom-first-bead-then-stop
+description: >
+  /backlog-groom sbx-56e --limit 3 with no approval given. Grooming is a
+  conversation: the skill may show and judge beads and propose changes, but
+  must not change anything until the user agrees. The --limit is
+  graded in backlog-groom-approved-runs-through, where overrunning it does damage.
+tags: [backlog-groom]
+execution:
+  max_turns: 40
+  timeout_seconds: 900
+  allowed_tools: [Read, Glob, Grep, Bash, Skill, Agent]
+  prompt: |
+    /beads-pm:backlog-groom sbx-56e --limit 3
+context:
+  scaffold_script: scaffold.sh
+graders:
+  - name: makes-no-backlog-changes
+    type: regex
+    target: trace
+    match: not_contains
+    pattern: '"command":"(?:[^"\\]|\\.)*\bbd (?:-\S+ )*(?:assign|batch|close|comment|create|create-form|defer|delete|duplicate|edit|import|label (?:add|remove)|link|note|priority|promote|purge|prune|reclaim|reopen|restore|set-state|supersede|tag|unclaim|undefer|update|dep (?:add|remove|rm)|cleanup|compact|flatten|gc)\b'
+  - name: judges-against-definition-of-ready
+    type: llm
+    criteria: Pass if the response shows at least one child of sbx-56e and judges it against the definition of ready with specifics - the clauses it fails, or concrete evidence for why it passes (files named, test described, edges present). A bare "looks ready" with no reasons fails.
+  - name: grooms-oldest-children-first
+    type: llm
+    criteria: Pass if the beads the response grooms (shows and judges) are sbx-56e.1, sbx-56e.2 and sbx-56e.3, the three oldest children, or a prefix of that list such as only sbx-56e.1. Grooming any other child (for example sbx-56e.7 or sbx-56e.4) as one of its stops fails; mentioning other beads in passing is fine.
+  - name: waits-for-agreement
+    type: llm
+    criteria: Pass if the response does not claim to have changed any bead, and any change it proposes is left waiting for the user's agreement.

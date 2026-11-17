@@ -1,0 +1,46 @@
+schema_version: "1.1"
+name: backlog-audit-epic-findings
+description: >
+  /backlog-audit against epic sbx-56e, which has five planted faults and no
+  cycle. The skill should dispatch backlog-auditor, relay every fault, say the
+  epic is not safe for an unattended worker loop, and change nothing.
+tags: [backlog-audit]
+execution:
+  max_turns: 40
+  timeout_seconds: 900
+  allowed_tools: [Read, Glob, Grep, Bash, Skill, Agent]
+  prompt: |
+    /beads-pm:backlog-audit sbx-56e
+context:
+  scaffold_script: scaffold.sh
+graders:
+  - name: dispatches-backlog-auditor
+    type: tool_used
+    tool: Agent
+    input_match: "backlog-auditor"
+  - name: makes-no-backlog-changes
+    type: regex
+    target: trace
+    match: not_contains
+    pattern: '"command":"(?:[^"\\]|\\.)*\bbd (?:-\S+ )*(?:assign|batch|close|comment|create|create-form|defer|delete|duplicate|edit|import|label (?:add|remove)|link|note|priority|promote|purge|prune|reclaim|reopen|restore|set-state|supersede|tag|unclaim|undefer|update|dep (?:add|remove|rm)|cleanup|compact|flatten|gc)\b'
+  - name: reports-stale-edge-onto-closed-bead
+    type: llm
+    criteria: Pass if the response reports that sbx-56e.5 has a dependency edge onto sbx-0um and that sbx-0um is closed.
+  - name: reports-decision-filed-as-work
+    type: llm
+    criteria: Pass if the response identifies sbx-56e.4 (retry/backoff policy) as a design decision that needs a human, rather than ordinary work a worker can do.
+  - name: reports-unready-bead
+    type: llm
+    criteria: Pass if anywhere in the response sbx-56e.5 ("Update README") is listed as not ready, failing the definition of ready, or missing named files, a described test, or acceptance criteria. Any one of those is enough; clause numbers alone (for example "fails clause 4") also count.
+  - name: reports-duplicate
+    type: llm
+    criteria: Pass if the response says sbx-56e.6 duplicates or overlaps sbx-56e.1 (both are the local sync state cache).
+  - name: reports-oversized-bead
+    type: llm
+    criteria: Pass if the response flags sbx-56e.7 as too big for one bead, for example because it touches many files, bundles several outcomes, or will not fit one session. Any one of those reasons is enough.
+  - name: no-hallucinated-cycle
+    type: llm
+    criteria: Pass if the response does not claim the epic has a dependency cycle. Saying there are no cycles passes. Claiming a cycle exists fails.
+  - name: says-not-safe-to-run
+    type: llm
+    criteria: Pass if the response states plainly that the epic is not safe to hand to an unattended worker loop yet.

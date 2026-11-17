@@ -1,0 +1,67 @@
+schema_version: "1.1"
+name: plan-to-beads-approved-file-through
+description: >
+  /plan-to-beads plan.md with approval given up front. The skill should show
+  the shape, hand filing to backlog-filer, then run backlog-auditor on the new
+  epic. The filed graph is graded from a bd export.
+tags: [plan-to-beads]
+execution:
+  max_turns: 80
+  timeout_seconds: 1800
+  allowed_tools: [Read, Glob, Grep, Bash, Skill, Agent]
+  prompt: |
+    /beads-pm:plan-to-beads plan.md
+
+    I have already reviewed a decomposition like this and approve whatever
+    reasonable shape you propose. I am not available to answer follow-up
+    questions in this session, so once you have shown the shape, proceed straight
+    through filing and the follow-up audit exactly as the skill describes.
+
+    Eval-harness note: when you are completely finished, run
+    `bd export -o post-state.jsonl` as your very last command. The grader reads
+    that file. Do not mention it in your reply.
+context:
+  scaffold_script: scaffold.sh
+graders:
+  - name: exported-post-state
+    type: file_exists
+    path: post-state.jsonl
+  - name: files-through-backlog-filer
+    type: tool_used
+    tool: Agent
+    input_match: "backlog-filer"
+  - name: audits-after-filing
+    type: tool_order
+    before: { tool: Agent, input_match: "backlog-filer" }
+    after: { tool: Agent, input_match: "backlog-auditor" }
+  - name: shows-shape-before-filing
+    type: regex
+    target: trace
+    flags: i
+    pattern: "ready now"
+  - name: files-an-epic
+    type: regex
+    target: { source: file, path: post-state.jsonl }
+    pattern: '"issue_type":"epic"'
+  - name: tags-retry-decision-human
+    type: regex
+    target: { source: file, path: post-state.jsonl }
+    flags: i
+    pattern: '"title":"[^"]*(retry|backoff)[^"]*"[^\n]*"labels":\[[^\]]*"human"'
+  - name: sets-no-priority
+    type: regex
+    target: { source: file, path: post-state.jsonl }
+    match: not_contains
+    pattern: '"priority":[0134]'
+  - name: children-cover-the-plan
+    type: llm
+    focus: { source: file, path: post-state.jsonl }
+    criteria: This is a bd export, one bead per line. Pass if there is an epic whose children cover the plan's items - a state store, a diff engine, wiring up the sync command, the retry/backoff decision, the state.json format decision, and the README update.
+  - name: wire-up-waits-on-store-and-diff
+    type: llm
+    focus: { source: file, path: post-state.jsonl }
+    criteria: This is a bd export, one bead per line. Pass if the bead that wires up the sync command has dependency edges (type blocks) onto both the state-store bead and the diff-engine bead.
+  - name: conflict-resolution-not-a-child
+    type: llm
+    focus: { source: file, path: post-state.jsonl }
+    criteria: This is a bd export, one bead per line. Pass if no child of the epic is the --prefer-local / --prefer-remote conflict-resolution work. A separate follow-on bead outside the epic, or no bead at all, passes.

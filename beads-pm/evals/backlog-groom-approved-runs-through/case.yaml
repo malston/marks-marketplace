@@ -1,0 +1,46 @@
+schema_version: "1.1"
+name: backlog-groom-approved-runs-through
+description: >
+  /backlog-groom sbx-56e --limit 4 with blanket approval. sbx-56e.4, a
+  retry/backoff decision, is among the first four children whichever listing
+  the model reads (bd children and bd show order them differently), so it must
+  end up tagged human.
+tags: [backlog-groom]
+execution:
+  max_turns: 80
+  timeout_seconds: 1500
+  allowed_tools: [Read, Glob, Grep, Bash, Skill, Agent]
+  prompt: |
+    /beads-pm:backlog-groom sbx-56e --limit 4
+
+    I approve every reasonable proposal you make in this session up to that
+    limit; you don't need to wait for me between beads, just tell me what you
+    changed as you go.
+
+    Eval-harness note: when you are completely finished, run
+    `bd export -o post-state.jsonl` as your very last command. The grader reads
+    that file. Do not mention it in your reply.
+context:
+  scaffold_script: scaffold.sh
+graders:
+  - name: exported-post-state
+    type: file_exists
+    path: post-state.jsonl
+  - name: tags-decision-human
+    type: regex
+    target: { source: file, path: post-state.jsonl }
+    pattern: '"id":"sbx-56e\.4"[^\n]*"labels":\[[^\]]*"human"'
+  - name: sets-no-priority
+    type: regex
+    target: { source: file, path: post-state.jsonl }
+    match: not_contains
+    pattern: '"priority":[0134]'
+  - name: honours-limit
+    type: llm
+    criteria: Pass if the response reaches no more than four existing beads of epic sbx-56e and then stops. Children created by splitting a bead do not count as extra beads reached. Grooming a fifth existing bead fails.
+  - name: does-not-decide-the-decision
+    type: llm
+    criteria: Pass if the response treats sbx-56e.4 (retry/backoff policy) as a decision for a human, at most recording a recommendation, and does not rewrite it into a task that assumes exponential or fixed backoff was chosen.
+  - name: ends-with-summary
+    type: llm
+    criteria: Pass if the response ends with a short summary giving how many beads were seen, how many changed, how many are now ready, how many are tagged human, and which were left for later.

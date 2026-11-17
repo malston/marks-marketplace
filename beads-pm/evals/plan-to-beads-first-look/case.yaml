@@ -1,0 +1,36 @@
+schema_version: "1.1"
+name: plan-to-beads-first-look
+description: >
+  /plan-to-beads plan.md with no approval given. The skill should decompose
+  the plan, show the graph shape with its numbers, flag the two design
+  decisions as human, and stop for approval without filing anything.
+tags: [plan-to-beads]
+execution:
+  max_turns: 40
+  timeout_seconds: 900
+  allowed_tools: [Read, Glob, Grep, Bash, Skill, Agent]
+  prompt: |
+    /beads-pm:plan-to-beads plan.md
+context:
+  scaffold_script: scaffold.sh
+graders:
+  - name: makes-no-backlog-changes
+    type: regex
+    target: trace
+    match: not_contains
+    pattern: '"command":"(?:[^"\\]|\\.)*\bbd (?:-\S+ )*(?:assign|batch|close|comment|create|create-form|defer|delete|duplicate|edit|import|label (?:add|remove)|link|note|priority|promote|purge|prune|reclaim|reopen|restore|set-state|supersede|tag|unclaim|undefer|update|dep (?:add|remove|rm)|cleanup|compact|flatten|gc)\b'
+  - name: does-not-dispatch-filer
+    type: tool_used
+    tool: Agent
+    input_match: "backlog-filer"
+    min: 0
+    max: 0
+  - name: shows-shape-numbers
+    type: llm
+    criteria: Pass if the response shows a shape summary with the epic title and counts for children, edges, depth, beads ready now, and human decisions.
+  - name: flags-both-decisions-human
+    type: llm
+    criteria: Pass if the proposed tree marks both the retry/backoff policy choice and the state.json on-disk format choice as decisions for a human rather than ordinary tasks.
+  - name: asks-for-approval
+    type: llm
+    criteria: Pass if the response ends by asking the user to approve or correct the shape before anything is filed.
