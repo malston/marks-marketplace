@@ -2,7 +2,7 @@
 # install-bd VERSION [DEST_DIR]
 #
 # Installs a pinned bd release binary for the eval suite's CI job: downloads
-# the Linux tarball for this machine's architecture from the beads GitHub
+# the Linux or macOS tarball for this machine from the beads GitHub
 # release, checks it against the release's checksums.txt, and installs bd
 # into DEST_DIR (default /usr/local/bin, which needs sudo on a CI runner).
 #
@@ -17,6 +17,12 @@ die() { printf '%s: %s\n' "$PROG" "$*" >&2; exit 1; }
 version="${1:?usage: install-bd VERSION [DEST_DIR]}"
 dest="${2:-/usr/local/bin}"
 
+case "$(uname -s)" in
+    Linux)  os=linux ;;
+    Darwin) os=darwin ;;
+    *)      die "unsupported OS: $(uname -s)" ;;
+esac
+
 case "$(uname -m)" in
     x86_64)        arch=amd64 ;;
     aarch64|arm64) arch=arm64 ;;
@@ -24,7 +30,7 @@ case "$(uname -m)" in
 esac
 
 readonly base="https://github.com/gastownhall/beads/releases/download/v${version}"
-readonly asset="beads_${version}_linux_${arch}.tar.gz"
+readonly asset="beads_${version}_${os}_${arch}.tar.gz"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 cd -- "$work"
@@ -32,7 +38,9 @@ cd -- "$work"
 curl -fsSL -o "$asset" "$base/$asset" || die "download failed: $base/$asset"
 curl -fsSL -o checksums.txt "$base/checksums.txt" || die "download failed: $base/checksums.txt"
 grep -F " $asset" checksums.txt > expected.txt || die "$asset not listed in checksums.txt"
-sha256sum --check --quiet expected.txt || die "checksum mismatch for $asset"
+# macOS before 15 has shasum but no sha256sum.
+if command -v sha256sum >/dev/null; then sha256=(sha256sum); else sha256=(shasum -a 256); fi
+"${sha256[@]}" --check --quiet expected.txt || die "checksum mismatch for $asset"
 
 tar -xzf "$asset" bd
 install -m 0755 bd "$dest/bd"
