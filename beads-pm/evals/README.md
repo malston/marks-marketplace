@@ -16,6 +16,10 @@ evals/run-evals --login            # locally, if a stale ANTHROPIC_API_KEY is ex
 one run per case) a full pass cost $1.08 and took about 4.5 minutes when
 measured on 2026-11-16; `--runs 3` cost $3.35.
 
+In CI (`.github/workflows/beads-pm-evals.yml`) set one repo secret:
+`CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` to bill a Claude
+subscription, or `ANTHROPIC_API_KEY` to bill an API account.
+
 ## Cases
 
 | Case                                | What it pins down                                                                                                                      |
