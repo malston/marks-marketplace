@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# install-bd VERSION [DEST_DIR]
+#
+# Installs a pinned bd release binary for the eval suite's CI job: downloads
+# the Linux tarball for this machine's architecture from the beads GitHub
+# release, checks it against the release's checksums.txt, and installs bd
+# into DEST_DIR (default /usr/local/bin, which needs sudo on a CI runner).
+#
+# Exists because `npm install -g @beads/bd` reported success on the GitHub
+# runner while its postinstall step never fetched the binary, leaving a shim
+# that fails on first use.
+set -Eeuo pipefail
+
+readonly PROG="${0##*/}"
+die() { printf '%s: %s\n' "$PROG" "$*" >&2; exit 1; }
+
+version="${1:?usage: install-bd VERSION [DEST_DIR]}"
+dest="${2:-/usr/local/bin}"
+
+case "$(uname -m)" in
+    x86_64)        arch=amd64 ;;
+    aarch64|arm64) arch=arm64 ;;
+    *)             die "unsupported architecture: $(uname -m)" ;;
+esac
+
+readonly base="https://github.com/gastownhall/beads/releases/download/v${version}"
+readonly asset="beads_${version}_linux_${arch}.tar.gz"
+work="$(mktemp -d)"
+trap 'rm -rf -- "$work"' EXIT
+cd -- "$work"
+
+curl -fsSL -o "$asset" "$base/$asset" || die "download failed: $base/$asset"
+curl -fsSL -o checksums.txt "$base/checksums.txt" || die "download failed: $base/checksums.txt"
+grep -F " $asset" checksums.txt > expected.txt || die "$asset not listed in checksums.txt"
+sha256sum --check --quiet expected.txt || die "checksum mismatch for $asset"
+
+tar -xzf "$asset" bd
+install -m 0755 bd "$dest/bd"
+"$dest/bd" --version

@@ -43,8 +43,13 @@ jobs:
       - name: Install sandbox dependencies
         run: sudo apt-get update && sudo apt-get install -y bubblewrap socat
 
-      - name: Install Claude Code and bd
-        run: npm install -g @anthropic-ai/claude-code@2.1.326 @beads/bd@1.3.4
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@2.1.326
+
+      # Not npm's @beads/bd: on the runner its postinstall never fetched the
+      # binary, and the shim it left fails on first use.
+      - name: Install bd
+        run: sudo beads-pm/evals/install-bd 1.3.4
 
       # Credentials: set ONE of these repo secrets.
       #   CLAUDE_CODE_OAUTH_TOKEN  from `claude setup-token`; bills your Claude
