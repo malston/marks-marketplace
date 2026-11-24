@@ -40,6 +40,9 @@
 #     .js, .jsx, .ts, .tsx - Formatted with prettier
 #     .json, .css, .scss   - Formatted with prettier
 #     .md, .yaml, .yml     - Formatted with prettier
+#     .md files are formatted only when the file's directory or a parent
+#     holds a prettier config or a package.json with a "prettier" key, and
+#     no .no-markdown-format file.
 #
 # DEPENDENCIES:
 #     - jq (required for JSON parsing)
@@ -75,8 +78,47 @@ if [[ "$file_path" == *.go ]]; then
     exit 0
 fi
 
+# True when the file's directory or a parent holds a prettier config, or a
+# package.json with a "prettier" key.
+has_prettier_config() {
+    local dir
+    dir=$(cd "$(dirname "$1")" && pwd)
+    while :; do
+        for name in .prettierrc .prettierrc.json .prettierrc.yaml .prettierrc.yml \
+                    .prettierrc.json5 .prettierrc.js .prettierrc.cjs .prettierrc.mjs \
+                    .prettierrc.toml prettier.config.js prettier.config.cjs \
+                    prettier.config.mjs prettier.config.ts; do
+            [[ -f "$dir/$name" ]] && return 0
+        done
+        if [[ -f "$dir/package.json" ]] &&
+            jq -e 'has("prettier")' "$dir/package.json" &>/dev/null; then
+            return 0
+        fi
+        [[ "$dir" == / ]] && return 1
+        dir=$(dirname "$dir")
+    done
+}
+
+# True when the file's directory or a parent holds .no-markdown-format, the
+# same opt-out markdown_formatter.py honours.
+markdown_opted_out() {
+    local dir
+    dir=$(cd "$(dirname "$1")" && pwd)
+    while :; do
+        [[ -f "$dir/.no-markdown-format" ]] && return 0
+        [[ "$dir" == / ]] && return 1
+        dir=$(dirname "$dir")
+    done
+}
+
 # Format JavaScript/TypeScript files with prettier
 if [[ "$file_path" =~ \.(js|jsx|ts|tsx|json|css|scss|md|yaml|yml)$ ]]; then
+    # Markdown is formatted only in a project that configures prettier, since
+    # prettier's default reflows prose in a repository that does not use it.
+    if [[ "$file_path" == *.md ]]; then
+        has_prettier_config "$file_path" || exit 0
+        markdown_opted_out "$file_path" && exit 0
+    fi
     if command -v prettier &>/dev/null; then
         prettier --write "$file_path" 2>/dev/null || true
     elif command -v npx &>/dev/null; then
